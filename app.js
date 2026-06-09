@@ -29,6 +29,34 @@ let users = [];
 let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
 
+// --- PRICE CALCULATION & VOICE INPUT HELPERS ---
+const getProductPrices = (prod) => {
+  const isCarton = String(prod.unit || prod.category).trim() === 'كرتون';
+  let cartonPrice = 0;
+  let unitPrice = 0;
+  
+  if (isCarton) {
+    cartonPrice = prod.price;
+    unitPrice = Math.round(prod.price / 12);
+  } else {
+    unitPrice = prod.price;
+    cartonPrice = prod.price * 12;
+  }
+  
+  return { cartonPrice, unitPrice };
+};
+
+const getActiveSearchInput = () => {
+  if (smartAiModal && !smartAiModal.classList.contains('hidden')) {
+    return aiTextInput;
+  }
+  const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
+  if (activeView === 'sales') return salesSearchBar;
+  if (activeView === 'customers') return document.getElementById('customers-search-bar');
+  if (activeView === 'inventory') return document.getElementById('inventory-search-bar');
+  return null;
+};
+
 // --- CUSTOM MODALS IMPLEMENTATION ---
 const showCustomAlert = (message) => {
   return new Promise((resolve) => {
@@ -295,7 +323,6 @@ const menuSalesHistoryBtn = document.getElementById('menu-sales-history-btn');
 const pullIndicator = document.getElementById('pull-to-refresh-indicator');
 
 const headerAddBtn = document.getElementById('header-add-btn');
-const globalSearchBar = document.getElementById('global-search-bar');
 const salesProductsCount = document.getElementById('sales-products-count');
 const salesProductsGrid = document.getElementById('sales-products-grid');
 
@@ -809,8 +836,7 @@ const renderSalesGrid = () => {
     return;
   }
 
-  const salesQuery = salesSearchBar ? salesSearchBar.value.toLowerCase().trim() : '';
-  const query = salesQuery || globalSearchBar.value.toLowerCase().trim();
+  const query = salesSearchBar ? salesSearchBar.value.toLowerCase().trim() : '';
   salesProductsGrid.innerHTML = '';
   
   const filtered = inventory.filter(p => 
@@ -845,16 +871,21 @@ const renderSalesGrid = () => {
     if (prod.quantity === 0) qtyClass = 'text-red-500 font-extrabold';
     else if (prod.quantity < 5) qtyClass = 'text-amber-500 font-extrabold';
 
+    const { cartonPrice, unitPrice } = getProductPrices(prod);
     card.innerHTML = `
       <div>
         <h4 class="text-xs font-extrabold text-gray-900 line-clamp-2 min-h-[32px]">${prod.name}</h4>
         <div class="mt-2 space-y-1">
           <div class="flex justify-between text-[10px]">
-            <span class="text-gray-400">سعر البيع:</span>
-            <span class="font-extrabold text-[#1e5631]">${prod.price.toLocaleString()} د.ع</span>
+            <span class="text-gray-400">سعر الكارتون:</span>
+            <span class="font-extrabold text-[#1e5631]">${cartonPrice.toLocaleString()} د.ع</span>
+          </div>
+          <div class="flex justify-between text-[10px]">
+            <span class="text-gray-400">سعر المفرد:</span>
+            <span class="font-extrabold text-[#1e5631]">${unitPrice.toLocaleString()} د.ع</span>
           </div>
           <div class="flex justify-between text-[10px] ${qtyClass}">
-            <span>الكمية في المخزن:</span>
+            <span>العدد:</span>
             <span>${prod.quantity} ${prod.unit}</span>
           </div>
         </div>
@@ -1298,7 +1329,8 @@ const renderCustomersList = () => {
     return;
   }
 
-  const query = globalSearchBar.value.toLowerCase().trim();
+  const customersSearchBar = document.getElementById('customers-search-bar');
+  const query = customersSearchBar ? customersSearchBar.value.toLowerCase().trim() : '';
   customersList.innerHTML = '';
   
   const filtered = customers.filter(c => c.name.toLowerCase().includes(query) || c.phone.includes(query));
@@ -1489,7 +1521,8 @@ const renderInventoryList = () => {
     return;
   }
 
-  const query = globalSearchBar.value.toLowerCase().trim();
+  const inventorySearchBar = document.getElementById('inventory-search-bar');
+  const query = inventorySearchBar ? inventorySearchBar.value.toLowerCase().trim() : '';
   inventoryList.innerHTML = '';
   
   const filtered = inventory.filter(p => p.name.toLowerCase().includes(query) || (p.barcode && p.barcode.includes(query)));
@@ -1508,18 +1541,19 @@ const renderInventoryList = () => {
     const card = document.createElement('div');
     card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex justify-between items-center gap-3 select-none';
     
+    const { cartonPrice, unitPrice } = getProductPrices(p);
     card.innerHTML = `
       <div class="space-y-1 flex-1 min-w-0">
         <h4 class="text-xs font-extrabold text-gray-900 truncate">${p.name}</h4>
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-400 font-bold">
           <span>شراء: <strong class="text-gray-700">${p.wholesalePrice.toLocaleString()} د.ع</strong></span>
-          <span>بيع: <strong class="text-gray-700">${p.price.toLocaleString()} د.ع</strong></span>
-          <span>باركود: <strong class="text-gray-700">${p.barcode}</strong></span>
+          <span>كارتون: <strong class="text-gray-700">${cartonPrice.toLocaleString()} د.ع</strong></span>
+          <span>مفرد: <strong class="text-gray-700">${unitPrice.toLocaleString()} د.ع</strong></span>
         </div>
       </div>
       <div class="flex items-center gap-3.5">
         <div class="text-left">
-          <span class="text-[9px] text-gray-450 block font-bold">الرصيد</span>
+          <span class="text-[9px] text-gray-450 block font-bold">العدد</span>
           <span class="text-xs font-black text-[#1e5631] block">${p.quantity} ${p.unit}</span>
         </div>
         <!-- Actions: Edit & Delete -->
@@ -1697,6 +1731,16 @@ const openProductModal = () => {
   editingProduct = null;
   if (productModalTitle) productModalTitle.textContent = "إضافة منتج جديد";
   if (productSubmitBtn) productSubmitBtn.textContent = "حفظ المنتج";
+
+  // Reset chips selector UI to default 'عبوة'
+  const pUnitInput = document.getElementById('p-unit');
+  const chipPacket = document.getElementById('p-unit-chip-packet');
+  const chipCarton = document.getElementById('p-unit-chip-carton');
+  if (pUnitInput && chipPacket && chipCarton) {
+    pUnitInput.value = 'عبوة';
+    chipPacket.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-[#1e5631] text-white border-[#1e5631]';
+    chipCarton.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100';
+  }
 
   addProductModal.classList.remove('hidden');
   setTimeout(() => {
@@ -2451,13 +2495,25 @@ navInventory.addEventListener('click', () => switchView('inventory'));
 customersAddBtnShortcut.addEventListener('click', openCustomerModal);
 inventoryAddBtnShortcut.addEventListener('click', openProductModal);
 
-globalSearchBar.addEventListener('input', () => {
-  // Filters active grids dynamically
-  const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
-  if (activeView === 'sales') renderSalesGrid();
-  if (activeView === 'customers') renderCustomersList();
-  if (activeView === 'inventory') renderInventoryList();
-});
+if (salesSearchBar) {
+  salesSearchBar.addEventListener('input', () => {
+    renderSalesGrid();
+  });
+}
+
+const customersSearchBar = document.getElementById('customers-search-bar');
+if (customersSearchBar) {
+  customersSearchBar.addEventListener('input', () => {
+    renderCustomersList();
+  });
+}
+
+const inventorySearchBar = document.getElementById('inventory-search-bar');
+if (inventorySearchBar) {
+  inventorySearchBar.addEventListener('input', () => {
+    renderInventoryList();
+  });
+}
 
 // Giant Hero FAB
 headerAddBtn.addEventListener('click', openQuickMenu);
@@ -3434,30 +3490,47 @@ const initSpeechRecognition = () => {
   recognition.interimResults = true;
   recognition.maxAlternatives = 3;
   
-  // Set Arabic (Iraqi) language with Saudi Arabic and generic Arabic fallbacks handled by the speech engine
-  try {
-    recognition.lang = 'ar-IQ';
-  } catch (e) {
-    recognition.lang = 'ar-SA';
-  }
+  // Force Arabic (Iraqi) language directly
+  recognition.lang = 'ar-IQ';
 
   recognition.onstart = () => {
     isRecording = true;
     if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
     if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
-    if (aiMicBtn) aiMicBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+    if (aiMicBtn) {
+      aiMicBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200', 'mic-active-pulse');
+    }
+    if (headerSmartAiBtn) {
+      headerSmartAiBtn.classList.add('mic-active-pulse');
+    }
   };
 
   recognition.onresult = (event) => {
-    let finalTranscript = '';
+    let transcript = '';
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript + ' ';
+        transcript += event.results[i][0].transcript;
       }
     }
-    if (aiTextInput && finalTranscript) {
-      aiTextInput.value = (aiTextInput.value + ' ' + finalTranscript.trim()).trim();
+    
+    transcript = transcript.trim();
+    if (!transcript) return;
+
+    console.log('Recognized Speech:', transcript);
+
+    const activeInput = getActiveSearchInput();
+    if (activeInput) {
+      if (activeInput === aiTextInput) {
+        activeInput.value = (activeInput.value + ' ' + transcript).trim();
+      } else {
+        activeInput.value = transcript;
+        // Dispatch the input event immediately so search filtering works
+        activeInput.dispatchEvent(new Event('input'));
+      }
     }
+
+    // Stop recognition to reset UI state after successful parsing
+    stopRecording();
   };
 
   recognition.onerror = (event) => {
@@ -3564,7 +3637,10 @@ const stopRecording = () => {
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
   if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
   if (aiMicBtn) {
-    aiMicBtn.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
+    aiMicBtn.classList.remove('bg-red-50', 'text-red-600', 'border-red-200', 'mic-active-pulse');
+  }
+  if (headerSmartAiBtn) {
+    headerSmartAiBtn.classList.remove('mic-active-pulse');
   }
   if (recognition) {
     try {
@@ -3732,13 +3808,42 @@ const executeAiCommand = async () => {
 
 // Bind listeners
 if (smartAiBtn) smartAiBtn.addEventListener('click', openSmartAiModal);
-if (headerSmartAiBtn) headerSmartAiBtn.addEventListener('click', openSmartAiModal);
+if (headerSmartAiBtn) headerSmartAiBtn.addEventListener('click', toggleRecording);
 if (checkoutQuickCustomerBtn) {
   checkoutQuickCustomerBtn.addEventListener('click', () => toggleQuickCustomerMode());
 }
 if (smartAiClose) smartAiClose.addEventListener('click', closeSmartAiModal);
 if (aiMicBtn) aiMicBtn.addEventListener('click', toggleRecording);
 if (aiExecuteBtn) aiExecuteBtn.addEventListener('click', executeAiCommand);
+
+// Checkout modal back button listener
+const checkoutBackBtn = document.getElementById('checkout-back-btn');
+if (checkoutBackBtn) {
+  checkoutBackBtn.addEventListener('click', () => {
+    closeCheckoutModal();
+  });
+}
+
+// Add Product form Unit chips selector bindings
+const pUnitInput = document.getElementById('p-unit');
+const chipPacket = document.getElementById('p-unit-chip-packet');
+const chipCarton = document.getElementById('p-unit-chip-carton');
+
+if (chipPacket && chipCarton && pUnitInput) {
+  const setUnit = (unit) => {
+    pUnitInput.value = unit;
+    if (unit === 'عبوة') {
+      chipPacket.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-[#1e5631] text-white border-[#1e5631]';
+      chipCarton.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100';
+    } else {
+      chipCarton.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-[#1e5631] text-white border-[#1e5631]';
+      chipPacket.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100';
+    }
+  };
+
+  chipPacket.addEventListener('click', () => setUnit('عبوة'));
+  chipCarton.addEventListener('click', () => setUnit('كرتون'));
+}
 
 if (headerDarkModeBtn) {
   headerDarkModeBtn.addEventListener('click', () => {

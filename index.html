@@ -93,9 +93,15 @@
           </button>
           <!-- Dropdown menu -->
           <div id="header-menu-dropdown" class="absolute right-0 mt-2 bg-white text-gray-800 rounded-2xl shadow-xl border border-gray-100 py-2 w-48 z-40 hidden opacity-0 transition-all duration-200 transform scale-95 origin-top-right">
-            <button id="menu-sales-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+            <!-- User Info Block -->
+            <div class="px-4 py-2.5 border-b border-gray-100 text-right select-none">
+              <span class="text-[9px] font-black text-gray-400 block mb-0.5">المستخدم الحالي</span>
+              <span id="header-user-name" class="text-xs font-black text-[#1e5631] block">...</span>
+            </div>
+            
+            <button id="header-sales-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
               <i class="fa-solid fa-receipt text-gray-500"></i>
-              <span>سجل البيع</span>
+              <span>سجل البيع والتقارير</span>
             </button>
             <button id="menu-purchase-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
               <i class="fa-solid fa-truck-ramp-box text-gray-500"></i>
@@ -105,29 +111,17 @@
               <i class="fa-solid fa-file-invoice-dollar text-gray-500"></i>
               <span>ديون الشركات / الموردين</span>
             </button>
-            <button id="menu-logout-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold text-red-650 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors">
+            <button id="header-logout-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold text-red-650 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors border-t border-gray-100 mt-1">
               <i class="fa-solid fa-right-from-bracket text-red-500"></i>
               <span>تسجيل الخروج</span>
             </button>
           </div>
         </div>
-        <!-- Direct Header Sales Log Button -->
-        <button id="header-sales-history-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors text-white" title="سجل البيع">
-          <i class="fa-solid fa-receipt text-lg"></i>
-        </button>
-        <!-- Direct Header Logout Button -->
-        <button id="header-logout-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 text-red-300 hover:text-red-200 flex items-center justify-center cursor-pointer transition-colors" title="تسجيل الخروج">
-          <i class="fa-solid fa-right-from-bracket text-lg"></i>
-        </button>
       </div>
-      <!-- User name display -->
-      <span id="header-user-name" class="text-[10px] font-black bg-white/20 px-2.5 py-1 rounded-lg select-none mr-2"></span>
-      <!-- Center: Title / Search Bar -->
-      <div class="flex-1 mx-3 relative">
-        <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/50 text-xs">
-          <i class="fa-solid fa-magnifying-glass"></i>
-        </span>
-        <input type="text" id="global-search-bar" placeholder="ابحث هنا..." class="w-full bg-white/10 text-white text-xs pl-3 pr-8.5 py-2 rounded-xl focus:outline-none focus:bg-white/20 placeholder:text-white/50 transition-all font-medium border border-white/10">
+
+      <!-- Center: App Title (De-cluttered by removing search input) -->
+      <div class="flex-grow text-center select-none pr-4">
+        <h1 class="text-xs font-black tracking-wide">نظام المبيعات والمخازن الذكي</h1>
       </div>
 
       <!-- Left Side: Dark Mode Toggle, Smart Assistant (🎤), Purchase Button, Add Button (+), Camera Icon, and Cart Button (with dynamic badge) -->
@@ -207,6 +201,14 @@
           </button>
         </div>
 
+        <!-- Search Bar -->
+        <div class="relative">
+          <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400 text-xs">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </span>
+          <input type="text" id="customers-search-bar" placeholder="البحث عن عميل..." class="w-full bg-white text-gray-800 text-xs pl-3 pr-8.5 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
+        </div>
+
         <!-- Customer List container -->
         <div id="customers-list" class="space-y-3 pb-6">
           <!-- Dynamic customer rows go here -->
@@ -224,6 +226,14 @@
             <i class="fa-solid fa-plus text-[8px]"></i>
             منتج جديد
           </button>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="relative">
+          <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400 text-xs">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </span>
+          <input type="text" id="inventory-search-bar" placeholder="البحث عن منتج في المخزن..." class="w-full bg-white text-gray-800 text-xs pl-3 pr-8.5 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
         </div>
 
         <div id="total-inventory-count" style="text-align: center; font-weight: bold; margin-bottom: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 8px;"></div>
@@ -448,9 +458,12 @@
             </div>
           </div>
 
-          <!-- Confirm Checkout button -->
-          <div class="pt-3 select-none">
-            <button id="checkout-confirm-btn" class="w-full py-4 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+          <!-- Confirm Checkout & Back buttons -->
+          <div class="pt-3 select-none flex gap-3">
+            <button type="button" id="checkout-back-btn" class="flex-1 py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer transition-all duration-150 active:scale-98">
+              رجوع
+            </button>
+            <button id="checkout-confirm-btn" class="flex-1 py-4 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
               تأكيد عملية البيع
             </button>
           </div>
@@ -527,17 +540,17 @@
           </div>
         </div>
 
-        <!-- Unit select -->
-        <div class="space-y-1 select-none">
-          <label for="p-unit" class="text-[10px] font-black text-gray-400 block">الوحدة</label>
-          <div class="relative">
-            <select id="p-unit" class="w-full bg-[#f4f6f5] text-gray-700 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-semibold">
-              <option value="عبوة" selected>عبوة (Packet)</option>
-              <option value="كرتون">كرتون (Carton)</option>
-            </select>
-            <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
-              <i class="fa-solid fa-chevron-down"></i>
-            </span>
+        <!-- Unit Selection (Sleek Stylized Chips) -->
+        <div class="space-y-1.5 select-none">
+          <label class="text-[10px] font-black text-gray-400 block">الوحدة</label>
+          <input type="hidden" id="p-unit" value="عبوة">
+          <div class="flex gap-3">
+            <button type="button" id="p-unit-chip-packet" class="flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-[#1e5631] text-white border-[#1e5631]">
+              عبوة (Packet)
+            </button>
+            <button type="button" id="p-unit-chip-carton" class="flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100">
+              كرتون (Carton)
+            </button>
           </div>
         </div>
 
