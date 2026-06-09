@@ -599,7 +599,7 @@ const showArabicToast = (message, type = 'success') => {
 };
 
 // --- FETCH INITIAL DATA (GET) ---
-const loadInitialData = (isSilent = false) => {
+const loadInitialData = (isSilent = false, username = '', password = '') => {
   const hasCachedData = inventory.length > 0 || customers.length > 0;
   const runSilently = isSilent || hasCachedData;
 
@@ -611,7 +611,12 @@ const loadInitialData = (isSilent = false) => {
     renderInventoryList();
   }
 
-  return fetch(BACKEND_URL)
+  let fetchUrl = BACKEND_URL;
+  if (username && password) {
+    fetchUrl += "?username=" + encodeURIComponent(username) + "&password=" + encodeURIComponent(password);
+  }
+
+  return fetch(fetchUrl)
     .then(res => {
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
@@ -4064,64 +4069,68 @@ const applyRBACRules = () => {
 
 // --- AUTHENTICATION & LOGIN HANDLERS ---
 const handleLogin = async () => {
-  const username = loginUsernameInput.value.trim();
-  const password = loginPasswordInput.value.trim();
-
-  if (!username || !password) {
-    showArabicToast('الرجاء إدخال اسم المستخدم وكلمة المرور', 'error');
-    return;
-  }
-
-  // Set button loading state
-  if (loginSubmitBtn) {
-    loginSubmitBtn.disabled = true;
-    loginSubmitBtn.textContent = 'جاري التحقق...';
-  }
-
-  let fetchError = null;
   try {
-    // Restore fetch request to verify credentials against backend
-    await loadInitialData(true);
-  } catch (err) {
-    console.warn("Failed to fetch fresh users from backend, falling back to local cache:", err);
-    fetchError = err;
-  }
+    const username = loginUsernameInput.value.trim();
+    const password = loginPasswordInput.value.trim();
 
-  const user = users.find(u => u['اسم المستخدم'] === username && String(u['كلمة المرور']) === password);
-  if (user) {
-    activeUser = user;
-    localStorage.setItem('activeUser', JSON.stringify(user));
-    document.documentElement.classList.add('user-logged-in');
-
-    loginContainer.style.display = 'none';
-    appContainer.style.display = 'flex';
-    headerUserName.textContent = activeUser['اسم المستخدم'];
-
-    loginUsernameInput.value = '';
-    loginPasswordInput.value = '';
-
-    showArabicToast(`أهلاً بك، ${activeUser['اسم المستخدم']}`, 'success');
-
-    applyRBACRules(); // Apply RBAC rules on successful login
-
-    renderInventoryList();
-    renderCustomersList();
-    renderSalesGrid();
-
-    // Silently fetch latest data in background to refresh views (SWR)
-    loadInitialData(true).catch(() => {});
-  } else {
-    if (fetchError && users.length === 0) {
-      showArabicToast('تعذر الاتصال بالسيرفر للتحقق من الحساب (لا توجد بيانات محلية)!', 'error');
-    } else {
-      showArabicToast('خطأ في اسم المستخدم أو كلمة المرور!', 'error');
+    if (!username || !password) {
+      throw new Error('الرجاء إدخال اسم المستخدم وكلمة المرور');
     }
-  }
 
-  // Restore button state
-  if (loginSubmitBtn) {
-    loginSubmitBtn.disabled = false;
-    loginSubmitBtn.textContent = 'دخول';
+    // Set button loading state
+    if (loginSubmitBtn) {
+      loginSubmitBtn.disabled = true;
+      loginSubmitBtn.textContent = 'جاري التحقق...';
+    }
+
+    let fetchError = null;
+    try {
+      // Restore fetch request to verify credentials against backend
+      await loadInitialData(true, username, password);
+    } catch (err) {
+      console.warn("Failed to fetch fresh users from backend, falling back to local cache:", err);
+      fetchError = err;
+    }
+
+    const user = users.find(u => u['اسم المستخدم'] === username && String(u['كلمة المرور']) === password);
+    if (user) {
+      activeUser = user;
+      localStorage.setItem('activeUser', JSON.stringify(user));
+      document.documentElement.classList.add('user-logged-in');
+
+      loginContainer.style.display = 'none';
+      appContainer.style.display = 'flex';
+      headerUserName.textContent = activeUser['اسم المستخدم'];
+
+      loginUsernameInput.value = '';
+      loginPasswordInput.value = '';
+
+      showArabicToast(`أهلاً بك، ${activeUser['اسم المستخدم']}`, 'success');
+
+      applyRBACRules(); // Apply RBAC rules on successful login
+
+      renderInventoryList();
+      renderCustomersList();
+      renderSalesGrid();
+
+      // Silently fetch latest data in background to refresh views (SWR)
+      loadInitialData(true).catch(() => {});
+    } else {
+      if (fetchError && users.length === 0) {
+        throw new Error('تعذر الاتصال بالسيرفر للتحقق من الحساب (لا توجد بيانات محلية)!');
+      } else {
+        throw new Error('خطأ في اسم المستخدم أو كلمة المرور!');
+      }
+    }
+  } catch (error) {
+    console.error("Login Error:", error);
+    showArabicToast(error.message, 'error');
+  } finally {
+    // Restore button state
+    if (loginSubmitBtn) {
+      loginSubmitBtn.disabled = false;
+      loginSubmitBtn.textContent = 'دخول';
+    }
   }
 };
 
@@ -4154,7 +4163,6 @@ if (menuLogoutBtn) {
   menuLogoutBtn.addEventListener('click', performLogout);
 }
 
-const headerLogoutBtn = document.getElementById('header-logout-btn');
 if (headerLogoutBtn) {
   headerLogoutBtn.addEventListener('click', performLogout);
 }
