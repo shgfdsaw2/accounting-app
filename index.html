@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نظام المبيعات والمخازن الذكي</title>
+  <!-- Google Fonts - Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- FontAwesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Tailwind CSS v4 CDN -->
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+  <!-- HTML5 QR Code Scanner Library -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <!-- Custom CSS for animations and layout overrides -->
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+    }
+  </style>
+</head>
+<body class="desktop-wrapper min-h-screen flex items-center justify-center py-0 md:py-6 px-0 md:px-4 bg-gray-100 overflow-x-hidden">
+
+  <!-- Main Mobile viewport simulator -->
+  <div class="relative w-full max-w-md bg-[#f4f6f5] md:shadow-2xl md:rounded-3xl border border-gray-200 flex flex-col overflow-hidden min-h-screen md:min-h-[820px] md:h-[820px]">
+    
+    <!-- LOGIN UI (Shown by default) -->
+    <div id="login-container" class="flex flex-col items-center justify-center flex-grow p-6 space-y-6 bg-white select-none h-full">
+      <div class="text-center space-y-2">
+        <div class="w-16 h-16 rounded-2xl bg-[#1e5631] text-white flex items-center justify-center mx-auto shadow-md">
+          <i class="fa-solid fa-lock text-2xl"></i>
+        </div>
+        <h2 class="text-lg font-black text-gray-900 mt-3">تسجيل الدخول</h2>
+        <p class="text-[10px] text-gray-400 font-medium">الرجاء إدخال بيانات الحساب للمتابعة</p>
+      </div>
+
+      <div class="w-full space-y-4">
+        <div class="space-y-1">
+          <label for="login-username" class="text-[10px] font-black text-gray-400 block">اسم المستخدم</label>
+          <input type="text" id="login-username" placeholder="اسم المستخدم..." class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+        <div class="space-y-1">
+          <label for="login-password" class="text-[10px] font-black text-gray-400 block">كلمة المرور</label>
+          <input type="password" id="login-password" placeholder="••••••••" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+      </div>
+
+      <button id="login-submit-btn" class="w-full py-4 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+        دخول
+      </button>
+    </div>
+
+    <!-- MAIN APP CONTAINER (Hidden by default) -->
+    <div id="app-container" style="display: none;" class="flex flex-col flex-grow h-full overflow-hidden">
+    
+    
+    <!-- Top System/Action Header Bar -->
+    <header class="relative bg-[#1e5631] text-white px-5 py-4 flex justify-between items-center z-10 shrink-0 select-none shadow-md">
+      <!-- Right Side: Menu button -->
+      <div class="relative">
+        <button id="header-menu-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors">
+          <i class="fa-solid fa-ellipsis-vertical text-lg"></i>
+        </button>
+        <!-- Dropdown menu -->
+        <div id="header-menu-dropdown" class="absolute right-0 mt-2 bg-white text-gray-800 rounded-2xl shadow-xl border border-gray-100 py-2 w-48 z-40 hidden opacity-0 transition-all duration-200 transform scale-95 origin-top-right">
+          <button id="menu-sales-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+            <i class="fa-solid fa-receipt text-gray-500"></i>
+            <span>سجل البيع</span>
+          </button>
+          <button id="menu-purchase-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+            <i class="fa-solid fa-truck-ramp-box text-gray-500"></i>
+            <span>سجل المشتريات</span>
+          </button>
+          <button id="menu-supplier-debts-btn" class="hidden w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+            <i class="fa-solid fa-file-invoice-dollar text-gray-500"></i>
+            <span>ديون الشركات / الموردين</span>
+          </button>
+        </div>
+      </div>
+      <!-- User name display -->
+      <span id="header-user-name" class="text-[10px] font-black bg-white/20 px-2.5 py-1 rounded-lg select-none mr-2"></span>
+      <!-- Center: Title / Search Bar -->
+      <div class="flex-1 mx-3 relative">
+        <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-white/50 text-xs">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </span>
+        <input type="text" id="global-search-bar" placeholder="ابحث هنا..." class="w-full bg-white/10 text-white text-xs pl-3 pr-8.5 py-2 rounded-xl focus:outline-none focus:bg-white/20 placeholder:text-white/50 transition-all font-medium border border-white/10">
+      </div>
+
+      <!-- Left Side: Purchase Button, Add Button (+), Camera Icon, Smart Assistant (🎤) and Cart Button (with dynamic badge) -->
+      <div class="flex items-center gap-2">
+        <button id="header-smart-ai-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors text-yellow-300" title="المساعد الذكي">
+          <i class="fa-solid fa-microphone text-lg"></i>
+        </button>
+        <button id="header-purchase-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="تسجيل مشتريات">
+          <i class="fa-solid fa-truck-loading text-lg"></i>
+        </button>
+        <button id="header-add-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="إضافة سريعة">
+          <i class="fa-solid fa-plus text-lg"></i>
+        </button>
+        <button id="header-camera-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="مسح باركود بالذكاء الاصطناعي">
+          <i class="fa-solid fa-camera-retro text-lg"></i>
+        </button>
+        <!-- Cart Badge indicator (shows on click or when active) -->
+        <button id="header-cart-btn" class="relative w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors">
+          <i class="fa-solid fa-basket-shopping text-lg"></i>
+          <span id="cart-badge-qty" class="absolute -top-1.5 -left-1.5 bg-[#f59e0b] text-white text-[9px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-[#1e5631] scale-0 transition-transform duration-200">0</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Screens View Area -->
+    <main class="flex-1 overflow-y-auto pb-20 no-scrollbar relative">
+      
+      <!-- Pull to Refresh Indicator -->
+      <div id="pull-to-refresh-indicator" class="flex items-center justify-center gap-2 bg-[#e8ecea] text-[#1e5631] text-xs font-bold transition-all duration-300 overflow-hidden h-0 opacity-0 select-none border-b border-[#c9d6cf]/30">
+        <i class="fa-solid fa-arrows-rotate fa-spin text-sm"></i>
+        <span>جاري التحديث...</span>
+      </div>
+      
+      <!-- SCREEN 2: SALES SCREEN (شاشة البيع) -->
+      <section id="view-sales" class="view-fade-in p-5 space-y-4">
+        <div class="flex justify-between items-center select-none">
+          <div>
+            <h2 class="text-sm font-black text-gray-900">شاشة نقطة البيع</h2>
+            <p class="text-[10px] text-gray-400 font-medium">انقر على أي كارت منتج لإضافته فوراً للسلة</p>
+          </div>
+          <span id="sales-products-count" class="text-[10px] font-black bg-[#1e5631]/10 text-[#1e5631] px-2.5 py-1 rounded-full">0 منتج</span>
+        </div>
+
+        <!-- Search and Scan Bar -->
+        <div class="flex gap-2">
+          <div class="flex-1 relative">
+            <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400 text-xs">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </span>
+            <input type="text" id="sales-search-bar" placeholder="البحث عن منتج..." class="w-full bg-white text-gray-800 text-xs pl-3 pr-8.5 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
+          </div>
+          <button id="sales-scan-btn" type="button" class="w-11 h-11 rounded-xl bg-[#e8ecea] text-[#1e5631] hover:bg-[#1e5631]/10 flex items-center justify-center cursor-pointer transition-colors shadow-sm" title="مسح باركود بالكاميرا">
+            📷
+          </button>
+        </div>
+
+        <!-- POS Product Grid cards -->
+        <div id="sales-products-grid" class="grid grid-cols-2 gap-3 pb-6">
+          <!-- Dynamic product cards go here -->
+        </div>
+      </section>
+
+      <!-- SCREEN 3: CUSTOMERS VIEW (العملاء) -->
+      <section id="view-customers" class="view-fade-in p-5 space-y-4 hidden">
+        <div class="flex justify-between items-center select-none">
+          <div>
+            <h2 class="text-sm font-black text-gray-900">سجل العملاء والديون</h2>
+            <p class="text-[10px] text-gray-400 font-medium">متابعة حسابات الديون والتواصل المباشر</p>
+          </div>
+          <button id="customers-add-btn-shortcut" class="text-[10px] font-black bg-[#1e5631] text-white px-3 py-1.5 rounded-xl cursor-pointer hover:bg-[#163e23] flex items-center gap-1">
+            <i class="fa-solid fa-plus text-[8px]"></i>
+            عميل جديد
+          </button>
+        </div>
+
+        <!-- Customer List container -->
+        <div id="customers-list" class="space-y-3 pb-6">
+          <!-- Dynamic customer rows go here -->
+        </div>
+      </section>
+
+      <!-- SCREEN 4: INVENTORY VIEW (المخزن) -->
+      <section id="view-inventory" class="view-fade-in p-5 space-y-4 hidden">
+        <div class="flex justify-between items-center select-none">
+          <div>
+            <h2 class="text-sm font-black text-gray-900">المخازن والمستودع</h2>
+            <p class="text-[10px] text-gray-400 font-medium">مراقبة مستويات المخزون والأسعار</p>
+          </div>
+          <button id="inventory-add-btn-shortcut" class="text-[10px] font-black bg-[#1e5631] text-white px-3 py-1.5 rounded-xl cursor-pointer hover:bg-[#163e23] flex items-center gap-1">
+            <i class="fa-solid fa-plus text-[8px]"></i>
+            منتج جديد
+          </button>
+        </div>
+
+        <div id="total-inventory-count" style="text-align: center; font-weight: bold; margin-bottom: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 8px;"></div>
+
+        <!-- Inventory items list -->
+        <div id="inventory-list" class="space-y-3 pb-6">
+          <!-- Dynamic inventory rows go here -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (3 Tabs) -->
+    <nav class="absolute bottom-0 left-0 right-0 h-16 bg-white border-t border-gray-100 flex justify-around items-center px-4 z-30 bottom-nav-shadow shrink-0 select-none">
+      
+      <!-- Tab 1: البيع (POS) -->
+      <button id="nav-sales" class="nav-tab-btn flex flex-col items-center justify-center flex-1 h-full text-[#1e5631] cursor-pointer">
+        <div class="nav-indicator px-4.5 py-1 rounded-full bg-[#e8ecea] text-[#1e5631]">
+          <i class="fa-solid fa-store text-base block text-center leading-none"></i>
+        </div>
+        <span class="text-[9px] font-bold mt-1">البيع</span>
+      </button>
+
+      <!-- Tab 2: العملاء (Customers) -->
+      <button id="nav-customers" class="nav-tab-btn flex flex-col items-center justify-center flex-1 h-full text-gray-400 cursor-pointer">
+        <div class="nav-indicator px-4.5 py-1 rounded-full">
+          <i class="fa-solid fa-users-viewfinder text-base block text-center leading-none"></i>
+        </div>
+        <span class="text-[9px] font-bold mt-1">العملاء</span>
+      </button>
+
+      <!-- Tab 3: المخزن (Inventory) -->
+      <button id="nav-inventory" class="nav-tab-btn flex flex-col items-center justify-center flex-1 h-full text-gray-400 cursor-pointer">
+        <div class="nav-indicator px-4.5 py-1 rounded-full">
+          <i class="fa-solid fa-cubes-stacked text-base block text-center leading-none"></i>
+        </div>
+        <span class="text-[9px] font-bold mt-1">المخزن</span>
+      </button>
+
+    </nav>
+
+    <!-- SHEET 1: HOME QUICK MENU BOTTOM SHEET -->
+    <div id="home-quick-menu" class="absolute inset-0 bg-black/40 z-40 modal-hidden modal-overlay transition-opacity flex items-end select-none">
+      <div id="quick-menu-dismiss" class="absolute inset-0 z-0 cursor-pointer"></div>
+      <!-- Content -->
+      <div class="relative w-full bg-white rounded-t-3xl p-5 z-10 modal-content shadow-2xl">
+        <div class="flex flex-col items-center gap-3.5 mb-2">
+          <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+          <div class="flex justify-between items-center w-full">
+            <h3 class="text-sm font-black text-gray-900">خيارات الإضافة السريعة</h3>
+            <button id="quick-menu-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 py-4">
+          <!-- Option 1: إضافة منتج -->
+          <button id="quick-add-product" class="flex flex-col items-center gap-3 p-4 bg-[#ebf0ee] hover:bg-[#1e5631]/10 rounded-2xl border border-gray-100 cursor-pointer group transition-all">
+            <div class="w-12 h-12 rounded-xl bg-[#1e5631] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+              <i class="fa-solid fa-box text-lg"></i>
+            </div>
+            <span class="text-[11px] font-black text-gray-800">إضافة منتج جديد</span>
+          </button>
+          
+          <!-- Option 2: إضافة عميل -->
+          <button id="quick-add-customer" class="flex flex-col items-center gap-3 p-4 bg-[#ebf0ee] hover:bg-[#1e5631]/10 rounded-2xl border border-gray-100 cursor-pointer group transition-all">
+            <div class="w-12 h-12 rounded-xl bg-[#1e5631] text-white flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+              <i class="fa-solid fa-user-plus text-lg"></i>
+            </div>
+            <span class="text-[11px] font-black text-gray-800">إضافة عميل جديد</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHEET 4: SALES CART VIEW (Bottom Sheet style) -->
+    <div id="cart-drawer" class="absolute inset-0 bg-black/40 z-40 modal-hidden modal-overlay transition-opacity flex items-end select-none">
+      <div id="cart-drawer-dismiss" class="absolute inset-0 z-0 cursor-pointer"></div>
+      
+      <!-- Cart Panel -->
+      <div class="relative w-full bg-white rounded-t-3xl p-5 z-10 modal-content shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <!-- Header -->
+        <div class="flex justify-between items-center pb-3.5 border-b border-gray-100 shrink-0">
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-black text-gray-900">سلة المشتريات</h3>
+            <span id="cart-qty-indicator" class="text-[10px] font-bold bg-[#e8ecea] text-[#1e5631] px-2 py-0.5 rounded-full">0 قطعة</span>
+          </div>
+          <button id="cart-drawer-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Scrollable list of items -->
+        <div id="cart-rows-container" class="flex-1 overflow-y-auto py-3 space-y-3 no-scrollbar select-text min-h-[150px]">
+          <!-- Dynamic cart item rows -->
+        </div>
+
+        <!-- Cart Summary & Complete Trigger -->
+        <div class="bg-[#f4f6f5] p-4 rounded-2xl space-y-3 shrink-0 border border-gray-100 select-none">
+          <div class="flex justify-between items-center">
+            <span class="text-[11px] font-black text-gray-500">إجمالي السعر:</span>
+            <span id="cart-total-price" class="text-sm font-black text-[#1e5631] bg-[#e8ecea] px-3.5 py-1 rounded-full">0 د.ع</span>
+          </div>
+          <!-- Complete Sale Button -->
+          <button id="cart-complete-sale-btn" class="w-full py-3.5 bg-[#1e5631] text-white font-bold text-xs rounded-xl hover:bg-[#163e23] transition-all cursor-pointer shadow-md active:scale-98">
+            إتمام البيع
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHEET 5: CHECKOUT / COMPLETE SALE DIALOG -->
+    <div id="checkout-modal" class="absolute inset-0 bg-black/40 z-40 modal-hidden modal-overlay transition-opacity flex items-end select-none">
+      <div id="checkout-dismiss" class="absolute inset-0 z-0 cursor-pointer"></div>
+      
+      <!-- Checkout sheet -->
+      <div class="relative w-full bg-white rounded-t-3xl p-5 z-10 modal-content shadow-2xl max-h-[85vh] overflow-y-auto no-scrollbar select-text">
+        <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+          <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+          <div class="flex justify-between items-center w-full">
+            <h3 class="text-sm font-black text-gray-900">تأكيد عملية البيع</h3>
+            <button id="checkout-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Checkout Summary values -->
+          <div class="bg-[#e8ecea]/40 p-4 rounded-2xl border border-[#e8ecea] space-y-2 select-none">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-500">إجمالي الفاتورة:</span>
+              <span id="checkout-subtotal-val" class="font-black text-gray-900">0 د.ع</span>
+            </div>
+            <div class="flex justify-between text-xs border-t border-gray-100 pt-2">
+              <span class="text-[#1e5631] font-bold">المطلوب سداده:</span>
+              <span id="checkout-final-val" class="font-black text-[#1e5631]">0 د.ع</span>
+            </div>
+          </div>
+
+          <!-- Customer Dropdown select -->
+          <div class="space-y-1 select-none">
+            <div class="flex justify-between items-center">
+              <label for="checkout-customer-select" class="text-[10px] font-black text-gray-400 block">اختيار العميل / المحل</label>
+              <div class="flex gap-2">
+                <button type="button" id="checkout-quick-customer-btn" class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[9px] font-black rounded-lg cursor-pointer transition-all flex items-center gap-1 active:scale-95 border border-gray-250 shadow-sm">
+                  <i class="fa-solid fa-plus text-[7px]"></i>
+                  <span>+ إضافة محل جديد</span>
+                </button>
+                <button type="button" id="smart-ai-btn" class="px-2.5 py-1 bg-[#1e5631] hover:bg-[#163e23] text-white text-[9px] font-black rounded-lg cursor-pointer transition-all flex items-center gap-1 active:scale-95 shadow-sm">
+                  <span>✨ المساعد الذكي</span>
+                </button>
+              </div>
+            </div>
+            
+            <!-- Existing Dropdown select wrapper -->
+            <div id="checkout-customer-select-wrapper" class="relative">
+              <select id="checkout-customer-select" class="w-full bg-[#f4f6f5] text-gray-700 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-semibold">
+                <!-- Dynamic customers options -->
+              </select>
+              <span class="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 text-xs">
+                <i class="fa-solid fa-chevron-down"></i>
+              </span>
+            </div>
+
+            <!-- Quick Add Customer Input wrapper (Hidden by default) -->
+            <div id="checkout-quick-customer-wrapper" class="hidden relative space-y-2">
+              <input type="text" id="checkout-quick-customer-name" placeholder="أدخل اسم المحل الجديد..." class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+              <div class="flex items-center gap-2 select-none py-1">
+                <input type="checkbox" id="checkout-quick-customer-gps" class="w-4 h-4 rounded text-[#1e5631] focus:ring-[#1e5631] cursor-pointer">
+                <label for="checkout-quick-customer-gps" class="text-xs font-bold text-gray-700 cursor-pointer">أنا متواجد في المحل حالياً</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Invoice Date (Autofilled to Today) -->
+          <div class="space-y-1">
+            <label for="checkout-date-input" class="text-[10px] font-black text-gray-400 block">تاريخ الفاتورة</label>
+            <input type="text" id="checkout-date-input" readonly class="w-full bg-gray-50 text-gray-500 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none font-semibold select-none cursor-not-allowed">
+          </div>
+
+          <!-- Discount Input -->
+          <div class="space-y-1">
+            <label for="checkout-discount" class="text-[10px] font-black text-gray-400 block">قيمة الخصم ($)</label>
+            <input type="number" id="checkout-discount" min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Received Amount & Debt Logic Indicator -->
+          <div class="space-y-2">
+            <label for="checkout-received-input" class="text-[10px] font-black text-gray-400 block">المبلغ المستلم ($)</label>
+            <div class="flex gap-3 items-center">
+              <input type="number" id="checkout-received-input" placeholder="0" class="flex-1 bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+              
+              <!-- Dynamic Debt Badge (آجل / مدفوع / جزئي) -->
+              <span id="checkout-debt-badge" class="px-3.5 py-2.5 rounded-xl text-xs font-black text-center min-w-[70px] select-none transition-all duration-200">
+                آجل
+              </span>
+            </div>
+          </div>
+
+          <!-- Confirm Checkout button -->
+          <div class="pt-3 select-none">
+            <button id="checkout-confirm-btn" class="w-full py-4 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+              تأكيد عملية البيع
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SHEET 6: SUCCESS POPUP OVERLAY -->
+    <div id="success-done-modal" class="absolute inset-0 bg-black/60 z-50 flex items-center justify-center hidden select-none">
+      <div class="bg-white p-6 rounded-3xl border border-gray-200 shadow-2xl flex flex-col items-center gap-4 text-center w-4/5">
+        <div class="w-14 h-14 rounded-full bg-[#e8ecea] text-[#1e5631] flex items-center justify-center text-2xl animate-bounce">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div>
+          <h3 class="font-black text-gray-900 text-base">تمت العملية بنجاح</h3>
+          <p class="text-xs text-gray-400 mt-1" id="success-modal-desc">تم حفظ البيانات وتحديث المخازن.</p>
+        </div>
+        <button id="success-modal-done-btn" class="w-full py-3 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl cursor-pointer">
+          إغلاق
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="pos-toast-container" class="absolute top-16 left-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    </div>
+  </div>
+
+  <!-- SHEET 2: ADD PRODUCT MODAL (Fixed Bottom Sheet) -->
+  <div id="add-product-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="add-product-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content form sheet -->
+    <div id="add-product-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 id="product-modal-title" class="text-sm font-black text-gray-900">إضافة منتج جديد</h3>
+          <button id="add-product-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <form id="product-form" class="space-y-4">
+        <!-- Name -->
+        <div class="space-y-1">
+          <label for="p-name" class="text-[10px] font-black text-gray-400 uppercase tracking-wider block">اسم المنتج</label>
+          <input type="text" id="p-name" required placeholder="مثال: دجاج تكا 12x" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- Barcode -->
+        <div class="flex gap-2 items-end select-none">
+          <div class="flex-1 space-y-1 select-text">
+            <label for="p-barcode" class="text-[10px] font-black text-gray-400 block">باركود المنتج</label>
+            <input type="text" id="p-barcode" value="622100987123" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+          <button type="button" class="w-11 h-11 rounded-xl bg-[#e8ecea] text-[#1e5631] hover:bg-[#1e5631]/10 flex items-center justify-center cursor-pointer transition-colors shadow-sm" title="مسح تلقائي">
+            <i class="fa-solid fa-barcode"></i>
+          </button>
+        </div>
+
+        <!-- Price grids -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label for="p-sell" class="text-[10px] font-black text-gray-400 block">سعر البيع ($)</label>
+            <input type="number" id="p-sell" required min="1" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+          <div class="space-y-1">
+            <label for="p-buy" class="text-[10px] font-black text-gray-400 block">سعر الشراء ($)</label>
+            <input type="number" id="p-buy" required min="1" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+        </div>
+
+        <!-- Unit select -->
+        <div class="space-y-1 select-none">
+          <label for="p-unit" class="text-[10px] font-black text-gray-400 block">الوحدة</label>
+          <div class="relative">
+            <select id="p-unit" class="w-full bg-[#f4f6f5] text-gray-700 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-semibold">
+              <option value="عبوة" selected>عبوة (Packet)</option>
+              <option value="كرتون">كرتون (Carton)</option>
+            </select>
+            <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
+              <i class="fa-solid fa-chevron-down"></i>
+            </span>
+          </div>
+        </div>
+
+        <!-- Stock Quantity -->
+        <div class="space-y-1">
+          <label for="p-qty" class="text-[10px] font-black text-gray-400 block">الكمية المتاحة</label>
+          <input type="number" id="p-qty" required min="0" placeholder="10" value="10" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- Save Product Button -->
+        <div class="pt-3 select-none">
+          <button type="submit" id="product-submit-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+            حفظ المنتج
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SHEET 3: ADD CUSTOMER MODAL (Fixed Bottom Sheet) -->
+  <div id="add-customer-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="add-customer-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content form sheet -->
+    <div id="add-customer-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">إضافة عميل جديد</h3>
+          <button id="add-customer-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <form id="customer-form" class="space-y-4">
+        <!-- Name -->
+        <div class="space-y-1">
+          <label for="c-name" class="text-[10px] font-black text-gray-400 block">اسم المحل / العميل</label>
+          <input type="text" id="c-name" required placeholder="مثال: متجر الهلال" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- Address -->
+        <div class="space-y-1">
+          <label for="c-address" class="text-[10px] font-black text-gray-400 block">العنوان</label>
+          <input type="text" id="c-address" required placeholder="مثال: بغداد، الكرادة" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- Phone -->
+        <div class="space-y-1">
+          <label for="c-phone" class="text-[10px] font-black text-gray-400 block">رقم الهاتف</label>
+          <input type="tel" id="c-phone" required placeholder="مثال: 9647701234567" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold select-text">
+        </div>
+
+        <!-- Debt -->
+        <div class="space-y-1">
+          <label for="c-debt" class="text-[10px] font-black text-gray-400 block">الدين الحالي ($)</label>
+          <input type="number" id="c-debt" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- GPS Checkbox -->
+        <div class="flex items-center gap-2 select-none py-1">
+          <input type="checkbox" id="c-use-gps" class="w-4 h-4 rounded text-[#1e5631] focus:ring-[#1e5631] cursor-pointer">
+          <label for="c-use-gps" class="text-xs font-bold text-gray-700 cursor-pointer">أنا متواجد في المحل حالياً</label>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-2 gap-3 pt-3 select-none">
+          <!-- Open WhatsApp -->
+          <button type="button" id="c-whatsapp-btn" class="w-full py-3.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-98">
+            <i class="fa-brands fa-whatsapp text-base"></i>
+            فتح في واتساب
+          </button>
+          <!-- Save -->
+          <button type="submit" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+            حفظ العميل
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- SHEET 7: SALES HISTORY MODAL (Detached) -->
+  <div id="sales-history-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="sales-history-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content sheet -->
+    <div id="sales-history-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">سجل البيع (الفواتير)</h3>
+          <button id="sales-history-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- History Invoice list -->
+      <div id="sales-history-list" class="space-y-3 pb-6 border-t border-gray-100 pt-3">
+        <!-- Dynamic invoices go here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 8: CUSTOMER PROFILE MODAL (Detached Ledger) -->
+  <div id="customer-profile-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="customer-profile-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content sheet -->
+    <div id="customer-profile-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">ملف العميل وكشف الحساب</h3>
+          <button id="customer-profile-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Profile Card Info -->
+      <div class="bg-[#f4f6f5] p-4.5 rounded-2xl border border-gray-100 space-y-2.5 mb-4 select-none">
+        <div class="flex justify-between items-center">
+          <span class="text-[11px] font-black text-gray-500">اسم المحل / العميل:</span>
+          <span id="profile-c-name" class="text-xs font-black text-gray-900">...</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[11px] font-black text-gray-500">رقم الهاتف:</span>
+          <span id="profile-c-phone" class="text-xs font-black text-gray-900 select-text">...</span>
+        </div>
+        <div class="flex justify-between items-center border-t border-gray-200/50 pt-2.5">
+          <div class="flex flex-col">
+            <span class="text-[11px] font-black text-gray-500">إجمالي الدين المستحق:</span>
+            <span id="profile-c-debt" class="text-xs font-black text-red-500">0 د.ع</span>
+          </div>
+          <button id="profile-pay-debt-btn" class="px-3.5 py-1.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-[10px] font-black rounded-xl cursor-pointer shadow-sm transition-colors active:scale-95">
+            تسديد دفعة
+          </button>
+        </div>
+      </div>
+
+      <!-- Pay Debt Form Container -->
+      <div id="pay-debt-form-container" class="hidden bg-[#ebf0ee] p-4 rounded-2xl border border-gray-150 space-y-3 mb-4 select-none">
+        <div class="flex justify-between items-center">
+          <label for="pay-debt-amount" class="text-[10px] font-black text-gray-700">مبلغ التسديد ($)</label>
+          <button type="button" id="pay-debt-cancel" class="text-[10px] text-gray-500 hover:text-gray-800 cursor-pointer">إلغاء</button>
+        </div>
+        <div class="flex gap-2">
+          <input type="number" id="pay-debt-amount" min="1" placeholder="أدخل المبلغ..." class="flex-1 bg-white text-gray-850 text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1e5631] font-semibold">
+          <button type="button" id="pay-debt-submit" class="px-4.5 py-2.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-xs font-black rounded-xl cursor-pointer shadow-sm transition-colors active:scale-95">
+            تأكيد
+          </button>
+        </div>
+      </div>
+      
+      <!-- Ledger Section -->
+      <div class="space-y-2.5">
+        <h4 class="text-xs font-extrabold text-gray-900 select-none border-b border-gray-100 pb-2">سجل الفواتير والتسديدات</h4>
+        <div id="profile-ledger-list" class="space-y-3 pb-6">
+          <!-- Dynamic ledger rows go here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 9: INVOICE DETAILS MODAL (Detached) -->
+  <div id="invoice-details-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="invoice-details-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content sheet -->
+    <div id="invoice-details-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">تفاصيل الفاتورة</h3>
+          <button id="invoice-details-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Universal print/whatsapp buttons inside details modal -->
+      <div class="flex gap-2.5 mb-4 select-none justify-center shrink-0">
+        <button id="detail-print-btn" class="flex-1 py-2.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-1.5 active:scale-95">
+          <i class="fa-solid fa-print text-xs"></i>
+          <span>طباعة</span>
+        </button>
+        <button id="detail-whatsapp-btn" class="flex-1 py-2.5 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-1.5 active:scale-95">
+          <i class="fa-brands fa-whatsapp text-sm"></i>
+          <span>واتساب</span>
+        </button>
+      </div>
+      
+      <!-- Invoice Metadata & Financial Summary -->
+      <div class="bg-[#f4f6f5] p-4.5 rounded-2xl border border-gray-100 space-y-2.5 mb-4 select-none text-[11px]">
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">رقم الفاتورة:</span>
+          <span id="detail-invoice-id" class="font-extrabold text-gray-900">...</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">التاريخ:</span>
+          <span id="detail-invoice-date" class="font-extrabold text-gray-900">...</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">العميل:</span>
+          <span id="detail-invoice-customer" class="font-extrabold text-gray-900">...</span>
+        </div>
+        
+        <div class="border-t border-gray-200/50 pt-2.5 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-400">المبلغ الكلي قبل الخصم:</span>
+            <span id="detail-invoice-subtotal" class="font-extrabold text-gray-600">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-400">قيمة الخصم:</span>
+            <span id="detail-invoice-discount" class="font-extrabold text-red-500">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-black text-[#1e5631]">السعر النهائي بعد الخصم:</span>
+            <span id="detail-invoice-total" class="font-black text-[#1e5631] text-xs">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-400">المبلغ الواصل / المستلم:</span>
+            <span id="detail-invoice-received" class="font-extrabold text-gray-700">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-400">حالة الفاتورة:</span>
+            <span id="detail-invoice-status" class="px-2.5 py-0.5 rounded-full border text-[9px] font-black">...</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Items Table/List -->
+      <div class="space-y-2.5">
+        <h4 class="text-xs font-extrabold text-gray-900 select-none border-b border-gray-100 pb-2">المواد المباعة</h4>
+        <div id="detail-invoice-items" class="space-y-3 pb-6">
+          <!-- Dynamic items list -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 10: ADD PURCHASE MODAL (Fixed Bottom Sheet) -->
+  <div id="add-purchase-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="add-purchase-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content form sheet -->
+    <div id="add-purchase-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto flex flex-col no-scrollbar">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none shrink-0">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">تسجيل قائمة مشتريات جديدة</h3>
+          <button id="add-purchase-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-4 flex-1">
+        <!-- Supplier Name -->
+        <div class="space-y-1">
+          <label for="pur-supplier" class="text-[10px] font-black text-gray-400 block">اسم الشركة / المورد</label>
+          <input type="text" id="pur-supplier" value="شركة جيكور" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </div>
+
+        <!-- Item Selector -->
+        <div class="grid grid-cols-3 gap-2 items-end">
+          <div class="col-span-2 space-y-1 select-none">
+            <label for="pur-item-select" class="text-[10px] font-black text-gray-400 block">المادة</label>
+            <div class="relative">
+              <select id="pur-item-select" class="w-full bg-[#f4f6f5] text-gray-700 text-[10px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-bold">
+                <!-- Dynamic options from inventory -->
+              </select>
+              <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
+                <i class="fa-solid fa-chevron-down"></i>
+              </span>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <label for="pur-item-qty" class="text-[10px] font-black text-gray-400 block">الكمية</label>
+            <input type="number" id="pur-item-qty" min="1" value="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-2.5 py-2.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+        </div>
+
+        <button type="button" id="pur-add-item-btn" class="w-full py-2.5 bg-[#e8ecea] hover:bg-[#1e5631]/10 text-[#1e5631] text-xs font-black rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-plus text-[10px]"></i>
+          إضافة المادة للقائمة
+        </button>
+
+        <!-- Selected Items Table/List -->
+        <div class="space-y-2">
+          <h4 class="text-[10px] font-black text-gray-400 select-none">المواد المضافة للقائمة</h4>
+          <div id="pur-items-list" class="space-y-2 max-h-[160px] overflow-y-auto border border-gray-100 p-2 rounded-xl bg-gray-50 no-scrollbar">
+            <!-- Dynamic rows for items added to purchase list -->
+            <div class="text-center py-4 text-[10px] text-gray-400 font-bold select-none">لا توجد مواد مضافة بعد.</div>
+          </div>
+        </div>
+
+        <!-- Paid Amount & Debt Tracker (Hidden) -->
+        <div class="space-y-1 hidden">
+          <label for="pur-paid-amount" class="text-[10px] font-black text-gray-400 block">المبلغ المدفوع حالياً للشركة (د.ع)</label>
+          <input type="number" id="pur-paid-amount" min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          <div id="pur-debt-display" class="text-[10px] font-bold text-red-500 mt-1 select-none">
+            المتبقي كـ دين للشركة: 0 د.ع
+          </div>
+        </div>
+
+        <!-- Dynamic Financial Math Summary -->
+        <div class="bg-[#f4f6f5] p-4 rounded-2xl border border-gray-100 space-y-2.5 select-none text-[11px]">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-500">إجمالي القائمة:</span>
+            <span id="pur-summary-before" class="font-extrabold text-gray-900">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center border-t border-gray-200/50 pt-2.5">
+            <span class="font-black text-[#1e5631] text-xs">المبلغ المطلوب دفعه:</span>
+            <span id="pur-summary-after" class="font-black text-[#1e5631] text-xs">0 د.ع</span>
+          </div>
+        </div>
+
+        <!-- Submit Purchase Button -->
+        <div class="pt-2 select-none">
+          <button type="button" id="pur-submit-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+            حفظ قائمة المشتريات
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 11: PURCHASE HISTORY MODAL (Fixed Bottom Sheet) -->
+  <div id="purchase-history-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="purchase-history-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content sheet -->
+    <div id="purchase-history-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">سجل المشتريات (القوائم)</h3>
+          <button id="purchase-history-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Purchase Invoices list -->
+      <div id="purchase-history-list" class="space-y-3 pb-6 border-t border-gray-100 pt-3">
+        <!-- Dynamic purchase invoices go here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 12: PURCHASE DETAILS MODAL (Fixed Bottom Sheet) -->
+  <div id="purchase-details-modal" class="fixed inset-0 z-50 transition-opacity duration-300 hidden opacity-0">
+    <!-- Backdrop -->
+    <div id="purchase-details-dismiss" class="fixed inset-0 bg-black/50 z-40 cursor-pointer"></div>
+    
+    <!-- Content sheet -->
+    <div id="purchase-details-content" class="fixed bottom-0 inset-x-0 z-50 bg-white rounded-t-2xl max-h-[85vh] overflow-y-auto p-5 shadow-2xl select-text translate-y-full transition-transform duration-300 max-w-md mx-auto">
+      <div class="flex flex-col items-center gap-3.5 mb-4 select-none">
+        <div class="w-10 h-1 bg-gray-200 rounded-full"></div>
+        <div class="flex justify-between items-center w-full">
+          <h3 class="text-sm font-black text-gray-900">تفاصيل قائمة المشتريات</h3>
+          <button id="purchase-details-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Purchase Metadata & Financial Summary -->
+      <div class="bg-[#f4f6f5] p-4.5 rounded-2xl border border-gray-100 space-y-2.5 mb-4 select-none text-[11px]">
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">رقم القائمة:</span>
+          <span id="pur-detail-id" class="font-extrabold text-gray-900">...</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">اسم الشركة:</span>
+          <span id="pur-detail-company" class="font-extrabold text-gray-900">...</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="font-bold text-gray-500">التاريخ والوقت:</span>
+          <span id="pur-detail-datetime" class="font-extrabold text-gray-900">...</span>
+        </div>
+        
+        <div class="border-t border-gray-200/50 pt-2.5 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-400">المبلغ الكلي قبل الخصم:</span>
+            <span id="pur-detail-subtotal" class="font-extrabold text-gray-600">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center text-emerald-700">
+            <span class="font-bold">صافي الربح (الخصم):</span>
+            <span id="pur-detail-profit" class="font-extrabold">0 د.ع</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="font-black text-[#1e5631]">المبلغ النهائي بعد الخصم (الواصل):</span>
+            <span id="pur-detail-total" class="font-black text-[#1e5631] text-xs">0 د.ع</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Items List -->
+      <div class="space-y-2.5">
+        <h4 class="text-xs font-extrabold text-gray-900 select-none border-b border-gray-100 pb-2">المواد المشتراة</h4>
+        <div id="pur-detail-items" class="space-y-3 pb-6">
+          <!-- Dynamic purchase items list -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 13: SUPPLIER DEBTS MODAL (Detached) -->
+  <div id="supplier-debts-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900">ديون الشركات / الموردين</h3>
+        <button id="supplier-debts-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="p-5 overflow-y-auto flex-1 space-y-4 no-scrollbar">
+        <!-- Add Payment Section Toggle Button / Form -->
+        <div class="flex justify-between items-center select-none">
+          <h4 class="text-xs font-extrabold text-gray-900">قائمة الموردين والديون</h4>
+          <button id="pay-supplier-toggle-btn" class="px-3 py-1.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-[10px] font-black rounded-xl cursor-pointer shadow-sm transition-colors flex items-center gap-1">
+            <i class="fa-solid fa-hand-holding-dollar"></i>
+            تسديد دفعة للشركة
+          </button>
+        </div>
+
+        <!-- Pay Supplier Form (Hidden by default) -->
+        <div id="pay-supplier-form-container" class="hidden bg-[#ebf0ee] p-4 rounded-2xl border border-gray-150 space-y-3 select-none">
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-black text-gray-700">تسجيل دفعة مسددة للمورد</span>
+            <button type="button" id="pay-supplier-cancel" class="text-[10px] text-gray-500 hover:text-gray-800 cursor-pointer">إلغاء</button>
+          </div>
+          
+          <div class="space-y-1">
+            <label for="pay-supplier-select" class="text-[9px] font-black text-gray-400 block">اختيار المورد</label>
+            <div class="relative">
+              <select id="pay-supplier-select" class="w-full bg-white text-gray-800 text-xs px-3 py-2.5 rounded-xl border border-gray-200 focus:outline-none appearance-none cursor-pointer font-semibold">
+                <!-- Options populated dynamically from suppliers list -->
+              </select>
+              <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-[10px]">
+                <i class="fa-solid fa-chevron-down"></i>
+              </span>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label for="pay-supplier-amount" class="text-[9px] font-black text-gray-400 block">المبلغ المسدد (د.ع)</label>
+            <div class="flex gap-2">
+              <input type="number" id="pay-supplier-amount" min="1" placeholder="أدخل المبلغ..." class="flex-1 bg-white text-gray-850 text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:border-[#1e5631] font-semibold">
+              <button type="button" id="pay-supplier-submit" class="px-4.5 py-2.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-xs font-black rounded-xl cursor-pointer shadow-sm transition-colors active:scale-95">
+                تأكيد الدفع
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Suppliers List -->
+        <div id="suppliers-list-container" class="space-y-3">
+          <!-- Dynamic supplier list rows -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 14: EDIT PRODUCT MODAL (Detached) -->
+  <div id="edit-product-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900">تعديل المادة</h3>
+        <button id="edit-product-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="p-5 overflow-y-auto flex-1 select-text">
+        <form id="edit-product-form" class="space-y-4">
+          <!-- Name -->
+          <div class="space-y-1">
+            <label for="edit-p-name" class="text-[10px] font-black text-gray-400 block">اسم المنتج</label>
+            <input type="text" id="edit-p-name" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+          
+          <!-- Barcode -->
+          <div class="space-y-1">
+            <label for="edit-p-barcode" class="text-[10px] font-black text-gray-400 block">الباركود</label>
+            <input type="text" id="edit-p-barcode" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Price grids -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <label for="edit-p-sell" class="text-[10px] font-black text-gray-400 block">سعر البيع (د.ع)</label>
+              <input type="number" id="edit-p-sell" required min="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            </div>
+            <div class="space-y-1">
+              <label for="edit-p-buy" class="text-[10px] font-black text-gray-400 block">سعر الشراء (د.ع)</label>
+              <input type="number" id="edit-p-buy" required min="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            </div>
+          </div>
+
+          <!-- Category -->
+          <div class="space-y-1">
+            <label for="edit-p-category" class="text-[10px] font-black text-gray-400 block">الصنف</label>
+            <input type="text" id="edit-p-category" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Stock Quantity -->
+          <div class="space-y-1">
+            <label for="edit-p-qty" class="text-[10px] font-black text-gray-400 block">الكمية المتاحة</label>
+            <input type="number" id="edit-p-qty" required min="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Save Product Button -->
+          <div class="pt-3 select-none">
+            <button type="submit" id="edit-product-submit-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+              حفظ التعديلات
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 15: EDIT CUSTOMER MODAL (Detached) -->
+  <div id="edit-customer-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900">تعديل بيانات العميل</h3>
+        <button id="edit-customer-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="p-5 overflow-y-auto flex-1 select-text">
+        <form id="edit-customer-form" class="space-y-4">
+          <!-- Name -->
+          <div class="space-y-1">
+            <label for="edit-c-name" class="text-[10px] font-black text-gray-400 block">اسم المحل / العميل</label>
+            <input type="text" id="edit-c-name" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+          
+          <!-- Address -->
+          <div class="space-y-1">
+            <label for="edit-c-address" class="text-[10px] font-black text-gray-400 block">العنوان</label>
+            <input type="text" id="edit-c-address" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Phone -->
+          <div class="space-y-1">
+            <label for="edit-c-phone" class="text-[10px] font-black text-gray-400 block">رقم الهاتف</label>
+            <input type="tel" id="edit-c-phone" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+
+          <!-- Debt (Read-only for safety/financial integrity) -->
+          <div class="bg-gray-50 p-4 rounded-xl border border-gray-100 select-none text-xs flex justify-between items-center">
+            <span class="font-bold text-gray-550">الدين الحالي (غير قابل للتعديل):</span>
+            <span id="edit-c-debt-read" class="font-black text-red-500">0 د.ع</span>
+          </div>
+
+          <!-- Save Button -->
+          <div class="pt-3 select-none">
+            <button type="submit" id="edit-customer-submit-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+              حفظ التعديلات
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 16: ADD RETURN MODAL (Detached) -->
+  <div id="add-return-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900">تسجيل مواد مرتجعة للعميل</h3>
+        <button id="add-return-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="p-5 overflow-y-auto flex-1 select-text space-y-4 no-scrollbar">
+        <!-- Customer Info Summary (Read-only) -->
+        <div class="bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs flex justify-between items-center select-none">
+          <span class="font-bold text-gray-500">اسم العميل:</span>
+          <span id="ret-customer-name-display" class="font-extrabold text-[#1e5631]">...</span>
+        </div>
+
+        <!-- Product Selector & Quantity -->
+        <div class="grid grid-cols-3 gap-2 items-end">
+          <div class="col-span-2 space-y-1 select-none">
+            <label for="ret-item-select" class="text-[10px] font-black text-gray-400 block">المادة المرتجعة</label>
+            <div class="relative">
+              <select id="ret-item-select" class="w-full bg-[#f4f6f5] text-gray-700 text-[10px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-bold">
+                <!-- Dynamic options from products (inventory) -->
+              </select>
+              <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
+                <i class="fa-solid fa-chevron-down"></i>
+              </span>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <label for="ret-item-qty" class="text-[10px] font-black text-gray-400 block">الكمية</label>
+            <input type="number" id="ret-item-qty" min="1" value="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-2.5 py-2.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+        </div>
+
+        <!-- Add Button -->
+        <button type="button" id="ret-add-item-btn" class="w-full py-2.5 bg-[#e8ecea] hover:bg-[#1e5631]/10 text-[#1e5631] text-xs font-black rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-plus text-[10px]"></i>
+          إضافة المادة لقائمة المرتجعات
+        </button>
+
+        <!-- Temporary Return List View -->
+        <div class="space-y-2">
+          <h4 class="text-[10px] font-black text-gray-400 select-none">قائمة المواد المرتجعة المؤقتة</h4>
+          <div id="ret-items-list" class="space-y-2 max-h-[160px] overflow-y-auto border border-gray-100 p-2 rounded-xl bg-gray-50 no-scrollbar">
+            <!-- Dynamic rows for return items -->
+            <div class="text-center py-4 text-[10px] text-gray-400 font-bold select-none">لا توجد مواد مضافة بعد.</div>
+          </div>
+        </div>
+
+        <!-- Refund Method -->
+        <div class="space-y-1 select-none">
+          <label for="ret-refund-method" class="text-[10px] font-black text-gray-400 block">طريقة الترجيع</label>
+          <div class="relative">
+            <select id="ret-refund-method" class="w-full bg-[#f4f6f5] text-gray-700 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-semibold">
+              <option value="خصم من الدين" selected>خصم من الدين (Deduct from Debt)</option>
+              <option value="إرجاع نقدي">إرجاع نقدي (Cash Refund)</option>
+            </select>
+            <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
+              <i class="fa-solid fa-chevron-down"></i>
+            </span>
+          </div>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="bg-[#f4f6f5] p-4 rounded-2xl border border-gray-100 space-y-2.5 select-none text-[11px]">
+          <div class="flex justify-between items-center">
+            <span class="font-black text-[#1e5631] text-xs">إجمالي قيمة المرتجعات:</span>
+            <span id="ret-summary-total" class="font-black text-[#1e5631] text-xs">0 د.ع</span>
+          </div>
+        </div>
+
+        <!-- Save Return Button -->
+        <div class="pt-2 select-none">
+          <button type="button" id="ret-submit-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all duration-150 active:scale-98">
+            حفظ المرتجع
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 17: INVOICE OPTIONS MODAL (Detached) -->
+  <div id="invoice-options-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-sm mx-auto overflow-hidden flex flex-col p-6 space-y-4 select-none">
+      <h3 class="text-sm font-black text-gray-900 text-center">خيارات الفاتورة</h3>
+      
+      <div class="grid grid-cols-1 gap-3">
+        <!-- Print Button -->
+        <button id="opt-print-btn" class="w-full py-4 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 active:scale-98">
+          <i class="fa-solid fa-print text-sm"></i>
+          <span>🖨️ طباعة الوصل</span>
+        </button>
+        <!-- WhatsApp Button -->
+        <button id="opt-whatsapp-btn" class="w-full py-4 bg-[#25D366] hover:bg-[#20ba5a] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 active:scale-98">
+          <i class="fa-brands fa-whatsapp text-sm"></i>
+          <span>💬 إرسال عبر واتساب</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SHEET 18: SMART AI ASSISTANT DIALOG (Detached Centered Modal) -->
+  <div id="smart-ai-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh] select-text">
+      <!-- Header -->
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900 flex items-center gap-1.5">
+          <span>✨</span>
+          <span>المساعد الذكي (AI Assistant)</span>
+        </h3>
+        <button id="smart-ai-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <!-- Body -->
+      <div class="p-5 space-y-4 flex flex-col">
+        <div class="space-y-1">
+          <label for="ai-text-input" class="text-[10px] font-black text-gray-400 block">اكتب طلبك أو تحدث مباشرة باللغة العربية (مثال: "سجل فاتورة لمتجر الهلال، 2 علبة دجاج تكا، والمستلم 30 ألف")</label>
+          <textarea id="ai-text-input" rows="4" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold resize-none" placeholder="أدخل نص الطلب هنا أو انقر على زر التحدث..."></textarea>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <!-- Mic / Voice Button -->
+          <button type="button" id="ai-mic-btn" class="flex-1 py-3 bg-[#e8ecea] hover:bg-[#1e5631]/10 text-[#1e5631] font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-2 active:scale-95 border border-[#c9d6cf]/30">
+            <span id="ai-mic-status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 hidden animate-pulse"></span>
+            <i class="fa-solid fa-microphone text-xs"></i>
+            <span id="ai-mic-btn-text">🎤 تحدث بصوتك</span>
+          </button>
+        </div>
+
+        <!-- Action & Loading states -->
+        <div class="space-y-2 pt-2">
+          <button type="button" id="ai-execute-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer transition-all flex items-center justify-center gap-2 active:scale-98">
+            <i id="ai-execute-icon" class="fa-solid fa-rocket text-xs"></i>
+            <span id="ai-execute-text">🚀 تنفيذ الطلب</span>
+          </button>
+          
+          <div id="ai-loading-state" class="hidden text-center py-2">
+            <i class="fa-solid fa-spinner fa-spin text-sm text-[#1e5631] ml-1.5"></i>
+            <span class="text-[10px] text-gray-500 font-bold">جاري تحليل الطلب وتحديث السلة...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CAMERA SCANNER MODAL -->
+  <div id="camera-scanner-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden p-5 select-none">
+    <div class="bg-white p-5 rounded-3xl border border-gray-250 shadow-2xl flex flex-col gap-4 w-full max-w-sm">
+      <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+        <h3 class="font-black text-gray-900 text-sm">مسح باركود المادة</h3>
+        <button id="camera-scanner-close-x" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      
+      <!-- Camera feed reader -->
+      <div class="overflow-hidden rounded-2xl border border-gray-200 bg-black/5 flex items-center justify-center min-h-[220px]">
+        <div id="reader" style="width: 100%;"></div>
+      </div>
+
+      <button id="camera-scanner-close-btn" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-all active:scale-98">
+        إغلاق الكاميرا
+      </button>
+    </div>
+  </div>
+
+  <!-- HIDDEN PRINT CONTAINER FOR RECEIPT -->
+  <div id="print-section" style="display: none;"></div>
+
+  <!-- Application logic JS -->
+  <script src="app.js"></script>
+</body>
+</html>

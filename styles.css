@@ -1,0 +1,155 @@
+/* CSS Styles for New Arabic POS App Flow */
+
+/* Custom Cairo Font Override */
+body {
+  font-family: 'Cairo', sans-serif;
+  direction: rtl;
+}
+
+/* Hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Pulse Ring Animation for Giant Hero Button */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(30, 86, 49, 0.4);
+  }
+  70% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 20px rgba(30, 86, 49, 0);
+  }
+  100% {
+    transform: scale(0.96);
+    box-shadow: 0 0 0 0 rgba(30, 86, 49, 0);
+  }
+}
+
+.pulse-btn {
+  animation: pulse-ring 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Modal and Bottom Sheet Animations */
+.modal-overlay {
+  transition: opacity 0.22s ease-out;
+}
+
+.modal-content {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-hidden .modal-content {
+  transform: translateY(100%);
+}
+
+.modal-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-visible .modal-content {
+  transform: translateY(0);
+}
+
+/* View transitions */
+.view-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Custom Shadows */
+.clean-shadow {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+}
+
+.box-shadow-lg {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+.bottom-nav-shadow {
+  box-shadow: 0 -2px 10px 0 rgba(0, 0, 0, 0.03);
+}
+
+@media print {
+  body > :not(#print-section) {
+    display: none !important;
+  }
+  #print-section {
+    display: block !important;
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+    padding: 10px;
+    color: #000;
+  }
+}
+
+/* Styling for html5-qrcode scanner UI to match the app theme */
+#reader {
+  border: none !important;
+}
+#reader video {
+  border-radius: 1rem !important;
+}
+#reader__dashboard_section_swaplink,
+#reader img[alt="Info icon"],
+#reader img[title="Info icon"],
+#reader__filescan_link,
+#reader select + span {
+  display: none !important;
+}
+#reader button {
+  background-color: #1e5631 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  padding: 0.75rem 1.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+  font-family: 'Cairo', sans-serif !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  margin: 0.5rem auto !important;
+  display: inline-block !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+#reader button:hover {
+  background-color: #163e23 !important;
+}
+#reader button:active {
+  transform: scale(0.98) !important;
+}
+#reader select {
+  background-color: #f4f6f5 !important;
+  color: #374151 !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.75rem !important;
+  padding: 0.625rem 1rem !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+  font-family: 'Cairo', sans-serif !important;
+  cursor: pointer !important;
+  margin: 0.5rem auto !important;
+  display: block !important;
+  width: 80% !important;
+}
