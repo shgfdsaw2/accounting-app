@@ -1,0 +1,16 @@
+{
+  "short_name": "المبيعات الذكي",
+  "name": "نظام المبيعات والمخازن الذكي",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/1055/1055666.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#f4f6f5",
+  "theme_color": "#1e5631",
+  "display": "standalone",
+  "orientation": "portrait"
+}

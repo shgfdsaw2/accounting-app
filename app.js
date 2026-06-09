@@ -20,6 +20,234 @@ let users = [];
 let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
 
+// --- CUSTOM MODALS IMPLEMENTATION ---
+const showCustomAlert = (message) => {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'custom-modal-backdrop';
+    
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal-window';
+    modal.innerHTML = `
+      <div class="w-12 h-12 rounded-2xl bg-[#e8ecea] text-[#1e5631] flex items-center justify-center text-xl">
+        <i class="fa-solid fa-circle-info"></i>
+      </div>
+      <div class="space-y-1.5 w-full">
+        <h3 class="font-black text-gray-900 text-sm">تنبيه</h3>
+        <p class="text-xs text-gray-500 leading-relaxed font-semibold px-2">${message}</p>
+      </div>
+      <button class="w-full py-3 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl cursor-pointer shadow-sm active:scale-98 transition-all">
+        موافق
+      </button>
+    `;
+    
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    
+    requestAnimationFrame(() => {
+      backdrop.classList.add('active');
+    });
+    
+    const close = () => {
+      backdrop.classList.remove('active');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve();
+      }, 250);
+    };
+    
+    modal.querySelector('button').addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close();
+    });
+  });
+};
+
+const showCustomConfirm = (message) => {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'custom-modal-backdrop';
+    
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal-window';
+    modal.innerHTML = `
+      <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl">
+        <i class="fa-solid fa-circle-question"></i>
+      </div>
+      <div class="space-y-1.5 w-full">
+        <h3 class="font-black text-gray-900 text-sm">تأكيد الإجراء</h3>
+        <p class="text-xs text-gray-500 leading-relaxed font-semibold px-2">${message}</p>
+      </div>
+      <div class="flex gap-3 w-full">
+        <button id="confirm-btn-yes" class="flex-1 py-3 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl cursor-pointer shadow-sm active:scale-98 transition-all">
+          نعم، متأكد
+        </button>
+        <button id="confirm-btn-no" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer active:scale-98 transition-all">
+          إلغاء
+        </button>
+      </div>
+    `;
+    
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    
+    requestAnimationFrame(() => {
+      backdrop.classList.add('active');
+    });
+    
+    const close = (result) => {
+      backdrop.classList.remove('active');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve(result);
+      }, 250);
+    };
+    
+    modal.querySelector('#confirm-btn-yes').addEventListener('click', () => close(true));
+    modal.querySelector('#confirm-btn-no').addEventListener('click', () => close(false));
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close(false);
+    });
+  });
+};
+
+const showCustomPrompt = (message, defaultValue = '') => {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'custom-modal-backdrop';
+    
+    const modal = document.createElement('div');
+    modal.className = 'custom-modal-window';
+    modal.innerHTML = `
+      <div class="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-650 flex items-center justify-center text-xl">
+        <i class="fa-solid fa-pen-to-square"></i>
+      </div>
+      <div class="space-y-1.5 w-full">
+        <h3 class="font-black text-gray-900 text-sm">إدخال بيانات</h3>
+        <p class="text-xs text-gray-500 leading-relaxed font-semibold px-2">${message}</p>
+        <input type="text" id="custom-prompt-input" value="${defaultValue}" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold mt-2 text-right">
+      </div>
+      <div class="flex gap-3 w-full">
+        <button id="prompt-btn-ok" class="flex-1 py-3 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl cursor-pointer shadow-sm active:scale-98 transition-all">
+          تأكيد
+        </button>
+        <button id="prompt-btn-cancel" class="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer active:scale-98 transition-all">
+          إلغاء
+        </button>
+      </div>
+    `;
+    
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    
+    const input = modal.querySelector('#custom-prompt-input');
+    
+    requestAnimationFrame(() => {
+      backdrop.classList.add('active');
+      input.focus();
+      input.select();
+    });
+    
+    const close = (submitted) => {
+      const val = submitted ? input.value : null;
+      backdrop.classList.remove('active');
+      setTimeout(() => {
+        backdrop.remove();
+        resolve(val);
+      }, 250);
+    };
+    
+    modal.querySelector('#prompt-btn-ok').addEventListener('click', () => close(true));
+    modal.querySelector('#prompt-btn-cancel').addEventListener('click', () => close(false));
+    input.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') close(true);
+    });
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) close(false);
+    });
+  });
+};
+
+window.alert = showCustomAlert;
+window.confirm = showCustomConfirm;
+window.prompt = showCustomPrompt;
+
+// --- LOCAL STORAGE DATA CACHING HELPERS ---
+const saveAllStatesToLocalStorage = () => {
+  localStorage.setItem('inventory', JSON.stringify(inventory));
+  localStorage.setItem('customers', JSON.stringify(customers));
+  localStorage.setItem('salesHistory', JSON.stringify(salesHistory));
+  localStorage.setItem('purchases', JSON.stringify(purchases));
+  localStorage.setItem('suppliers', JSON.stringify(suppliers));
+  localStorage.setItem('users', JSON.stringify(users));
+};
+
+const loadStatesFromLocalStorage = () => {
+  inventory = JSON.parse(localStorage.getItem('inventory') || '[]');
+  products = inventory;
+  customers = JSON.parse(localStorage.getItem('customers') || '[]');
+  salesHistory = JSON.parse(localStorage.getItem('salesHistory') || '[]');
+  purchases = JSON.parse(localStorage.getItem('purchases') || '[]');
+  suppliers = JSON.parse(localStorage.getItem('suppliers') || '[]');
+  users = JSON.parse(localStorage.getItem('users') || '[]');
+};
+
+// --- OPTIMISTIC UI BACKGROUND SYNC QUEUE ---
+let syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+const saveQueue = () => localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
+
+const addToSyncQueue = (payload) => {
+  syncQueue.push({
+    id: Date.now() + Math.random().toString(36).substr(2, 9),
+    payload: payload
+  });
+  saveQueue();
+  processSyncQueue();
+};
+
+let isProcessingQueue = false;
+const processSyncQueue = async () => {
+  if (isProcessingQueue) return;
+  if (!navigator.onLine) return;
+  if (syncQueue.length === 0) return;
+
+  isProcessingQueue = true;
+  console.log(`Background sync processing... ${syncQueue.length} items in queue.`);
+
+  while (syncQueue.length > 0) {
+    const item = syncQueue[0];
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify(item.payload),
+        redirect: 'follow'
+      });
+      
+      const resData = await response.json();
+      if (resData && resData.status === 'error') {
+        console.error("Server returned sync error:", resData.message);
+        syncQueue.shift();
+        saveQueue();
+      } else {
+        syncQueue.shift();
+        saveQueue();
+        console.log("Sync item processed successfully:", item.payload.action);
+      }
+    } catch (err) {
+      console.error("Failed to sync queue item:", err);
+      break;
+    }
+  }
+
+  isProcessingQueue = false;
+};
+
+window.addEventListener('online', processSyncQueue);
+
+
 const getCurrentLocation = () => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -350,10 +578,11 @@ const showArabicToast = (message, type = 'success') => {
     toast.classList.remove('translate-y-[-10px]', 'opacity-0');
   }, 10);
 
+  const duration = type === 'success' ? 1500 : 2500;
   setTimeout(() => {
     toast.classList.add('translate-y-[-10px]', 'opacity-0');
     setTimeout(() => toast.remove(), 300);
-  }, 3000);
+  }, duration);
 };
 
 // --- FETCH INITIAL DATA (GET) ---
@@ -502,6 +731,9 @@ const loadInitialData = (isSilent = false) => {
 
       isLoading = false;
       hasError = false;
+
+      // Cache all state to localStorage
+      saveAllStatesToLocalStorage();
 
       // Update active customer profile in-place if modal is open
       if (activeProfileCustomer && !customerProfileModal.classList.contains('hidden')) {
@@ -1069,7 +1301,7 @@ const renderCustomersList = () => {
     // GPS Relocate click handler
     card.querySelector('.btn-gps-relocate').addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (confirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
+      if (await showCustomConfirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
         showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
         try {
           const gpsVal = await getCurrentLocation();
@@ -1083,24 +1315,11 @@ const renderCustomersList = () => {
             gps: gpsVal
           };
 
-          showArabicToast('جاري حفظ الموقع الجديد على السيرفر...', 'info');
-          const response = await fetch(BACKEND_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'text/plain;charset=utf-8'
-            },
-            body: JSON.stringify(updatePayload),
-            redirect: 'follow'
-          });
-
-          const result = await response.json();
-          if (result.status === 'success') {
-            c.gps = gpsVal;
-            showArabicToast('تم تحديث الموقع الجغرافي للمحل بنجاح!', 'success');
-            renderCustomersList();
-          } else {
-            showArabicToast('فشل تحديث موقع GPS للمحل: ' + (result.message || ''), 'error');
-          }
+          c.gps = gpsVal;
+          saveAllStatesToLocalStorage();
+          renderCustomersList();
+          showArabicToast('تم تحديث الموقع الجغرافي للمحل بنجاح!', 'success');
+          addToSyncQueue(updatePayload);
         } catch (err) {
           console.error("GPS relocate error:", err);
           showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
@@ -1922,8 +2141,8 @@ const sendInvoiceWhatsApp = (sale, customer) => {
   window.open(url, '_blank');
 };
 
-const deleteProduct = (product) => {
-  if (!confirm(`هل أنت متأكد من حذف المنتج "${product.name}"؟`)) {
+const deleteProduct = async (product) => {
+  if (!(await showCustomConfirm(`هل أنت متأكد من حذف المنتج "${product.name}"؟`))) {
     return;
   }
 
@@ -1932,29 +2151,16 @@ const deleteProduct = (product) => {
     name: product.name
   };
 
-  fetch(BACKEND_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(() => {
-    // Update local state
-    inventory = inventory.filter(item => item.id !== product.id);
-    products = inventory;
-    
-    // Refresh views
-    renderInventoryList();
-    renderSalesGrid();
-    
-    alert('تم حذف المنتج بنجاح!');
-  })
-  .catch(err => {
-    console.error("Error deleting product:", err);
-    showArabicToast('حدث خطأ أثناء الاتصال بالسيرفر!', 'error');
-  });
+  // Optimistic UI updates
+  inventory = inventory.filter(item => item.id !== product.id);
+  products = inventory;
+  saveAllStatesToLocalStorage();
+  
+  renderInventoryList();
+  renderSalesGrid();
+  
+  showArabicToast('تم حذف المنتج بنجاح!', 'success');
+  addToSyncQueue(payload);
 };
 
 const openCustomerModal = () => {
@@ -2029,6 +2235,23 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     opt.textContent = `${c.name} (${c.address})`;
     checkoutCustomerSelect.appendChild(opt);
   });
+
+  // Set default custom dropdown label
+  if (customers.length > 0) {
+    const defaultCust = customers[0];
+    checkoutCustomerSelect.value = defaultCust.id;
+    if (customCustomerDropdownLabel) {
+      customCustomerDropdownLabel.textContent = `${defaultCust.name} (${defaultCust.address})`;
+    }
+  } else {
+    if (customCustomerDropdownLabel) {
+      customCustomerDropdownLabel.textContent = "اختر العميل / المحل...";
+    }
+  }
+
+  if (customCustomerDropdownMenu) {
+    customCustomerDropdownMenu.classList.add('hidden');
+  }
 
   checkoutModal.classList.remove('hidden');
   setTimeout(() => {
@@ -2191,45 +2414,23 @@ if (paySupplierSubmit) {
       amount: paidAmount
     };
 
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload),
-        redirect: 'follow'
-      });
-      
-      const result = await response.json();
-      
-      if (result.status === "error") {
-        alert("خطأ من السيرفر: " + result.message);
-        return;
-      }
-
-      if (result.status === "success") {
-        // Locally update supplier debt
-        const supp = suppliers.find(s => s.name === companyName);
-        if (supp) {
-          supp.debt = Math.max(0, supp.debt - paidAmount);
-        }
-        
-        // Clear inputs
-        paySupplierAmount.value = '';
-        paySupplierFormContainer.classList.add('hidden');
-        
-        // Refresh UI
-        renderSuppliersList();
-        openSupplierDebtsModal(); // to re-populate the dropdown too!
-        
-        alert("تم تسجيل الدفعة وتخفيض الدين بنجاح!");
-      } else {
-        alert("فشل في تسجيل الدفعة: استجابة غير معروفة");
-      }
-    } catch (err) {
-      alert("فشل الاتصال بالسيرفر: " + err.message);
+    // Optimistic UI update
+    const supp = suppliers.find(s => s.name === companyName);
+    if (supp) {
+      supp.debt = Math.max(0, supp.debt - paidAmount);
     }
+    
+    paySupplierAmount.value = '';
+    if (paySupplierFormContainer) {
+      paySupplierFormContainer.classList.add('hidden');
+    }
+    
+    saveAllStatesToLocalStorage();
+    renderSuppliersList();
+    openSupplierDebtsModal(); // re-populate dropdown
+    
+    showArabicToast("تم تسجيل الدفعة وتخفيض الدين بنجاح!", "success");
+    addToSyncQueue(payload);
   });
 }
 
@@ -2268,7 +2469,7 @@ if (payDebtCancel) {
 }
 
 if (payDebtSubmit) {
-  payDebtSubmit.addEventListener('click', () => {
+  payDebtSubmit.addEventListener('click', async () => {
     if (!activeProfileCustomer) return;
     const amount = parseFloat(payDebtAmount.value);
     if (isNaN(amount) || amount <= 0) {
@@ -2288,47 +2489,38 @@ if (payDebtSubmit) {
       amount: amount
     };
 
-    fetch(BACKEND_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    })
-    .then(() => {
-      activeProfileCustomer.debt = Math.max(0, activeProfileCustomer.debt - amount);
-      const cIdx = customers.findIndex(c => c.id === activeProfileCustomer.id);
-      if (cIdx !== -1) {
-        customers[cIdx].debt = activeProfileCustomer.debt;
-      }
+    // Optimistic UI updates
+    activeProfileCustomer.debt = Math.max(0, activeProfileCustomer.debt - amount);
+    const cIdx = customers.findIndex(c => c.id === activeProfileCustomer.id);
+    if (cIdx !== -1) {
+      customers[cIdx].debt = activeProfileCustomer.debt;
+    }
 
-      salesHistory.push({
-        id: salesHistory.length > 0 ? Math.max(...salesHistory.map(s => s.id)) + 1 : 1,
-        invoiceId: invoiceId,
-        date: dateStr,
-        customerName: customerName,
-        totalAmount: amount,
-        subtotal: amount,
-        discount: 0,
-        receivedAmount: amount,
-        status: 'تسديد دفعة',
-        items: []
-      });
-
-      profileCDebt.textContent = `${activeProfileCustomer.debt.toLocaleString()} د.ع`;
-      renderCustomerLedgerView(activeProfileCustomer);
-      renderCustomersList();
-      
-      payDebtFormContainer.classList.add('hidden');
-      payDebtAmount.value = '';
-
-      alert('تم تسجيل عملية التسديد بنجاح!');
-    })
-    .catch(err => {
-      console.error("Error recording payment:", err);
-      showArabicToast('حدث خطأ أثناء الاتصال بالسيرفر!', 'error');
+    salesHistory.push({
+      id: salesHistory.length > 0 ? Math.max(...salesHistory.map(s => s.id)) + 1 : 1,
+      invoiceId: invoiceId,
+      date: dateStr,
+      customerName: customerName,
+      totalAmount: amount,
+      subtotal: amount,
+      discount: 0,
+      receivedAmount: amount,
+      status: 'تسديد دفعة',
+      items: []
     });
+
+    profileCDebt.textContent = `${activeProfileCustomer.debt.toLocaleString()} د.ع`;
+    renderCustomerLedgerView(activeProfileCustomer);
+    renderCustomersList();
+    
+    if (payDebtFormContainer) {
+      payDebtFormContainer.classList.add('hidden');
+    }
+    payDebtAmount.value = '';
+    
+    saveAllStatesToLocalStorage();
+    showArabicToast('تم تسجيل عملية التسديد بنجاح!', 'success');
+    addToSyncQueue(payload);
   });
 }
 
@@ -2394,7 +2586,6 @@ if (purSubmitBtn) {
       subtotal += item.price * item.qty;
     });
     const total = subtotal;
-    
     const paidAmount = total;
     
     const invoiceId = "PUR-" + Date.now();
@@ -2417,71 +2608,34 @@ if (purSubmitBtn) {
       items: payloadItems
     };
 
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload),
-        redirect: 'follow'
-      });
-      
-      const result = await response.json();
-      
-      if (result.status === "error") {
-        alert("خطأ من السيرفر: " + result.message);
-        return;
+    // Optimistic UI updates: update local inventory and purchases list
+    purchaseCart.forEach(item => {
+      const prod = inventory.find(p => p.id === item.productId);
+      if (prod) {
+        prod.qty += item.qty;
+        prod.quantity += item.qty;
       }
-      
-      if (result.status === "success") {
-        // Update local state inventory
-        purchaseCart.forEach(item => {
-          const prod = inventory.find(p => p.id === item.productId);
-          if (prod) {
-            prod.qty += item.qty;
-            prod.quantity += item.qty;
-          }
-        });
-        
-        // Update supplier debt locally if there is a remaining debt
-        const remainingDebt = total - paidAmount;
-        if (remainingDebt > 0) {
-          const supp = suppliers.find(s => s.name === companyName);
-          if (supp) {
-            supp.debt += remainingDebt;
-          } else {
-            suppliers.push({
-              id: suppliers.length > 0 ? Math.max(...suppliers.map(s => s.id)) + 1 : 1,
-              name: companyName,
-              debt: remainingDebt
-            });
-          }
-        }
-        
-        // Save locally
-        purchases.push({
-          id: purchases.length > 0 ? Math.max(...purchases.map(p => p.id)) + 1 : 1,
-          invoiceId: invoiceId,
-          companyName: companyName,
-          dateTime: dateTime,
-          totalBeforeDiscount: subtotal,
-          totalAfterDiscount: total,
-          paidAmount: paidAmount,
-          items: payloadItems
-        });
-        
-        purchaseCart = [];
-        closeAddPurchaseModal();
-        alert('تم تسجيل عملية الشراء وتحديث المخزن بنجاح!');
-        renderSalesGrid();
-        renderInventoryList();
-      } else {
-        alert("فشل في معالجة القائمة: استجابة غير معروفة");
-      }
-    } catch (err) {
-      alert("فشل الاتصال بالسيرفر: " + err.message);
-    }
+    });
+    
+    purchases.push({
+      id: purchases.length > 0 ? Math.max(...purchases.map(p => p.id)) + 1 : 1,
+      invoiceId: invoiceId,
+      companyName: companyName,
+      dateTime: dateTime,
+      totalBeforeDiscount: subtotal,
+      totalAfterDiscount: total,
+      paidAmount: paidAmount,
+      items: payloadItems
+    });
+    
+    saveAllStatesToLocalStorage();
+    purchaseCart = [];
+    closeAddPurchaseModal();
+    renderSalesGrid();
+    renderInventoryList();
+    
+    showArabicToast('تم تسجيل عملية الشراء وتحديث المخزن بنجاح!', 'success');
+    addToSyncQueue(payload);
   });
 }
 
@@ -2550,53 +2704,33 @@ if (retSubmitBtn) {
       refundMethod: selectedMethod,
       items: payloadItems
     };
+
+    // Optimistically update local inventory
+    returnCart.forEach(item => {
+      const prod = inventory.find(p => p.id === item.productId);
+      if (prod) {
+        prod.qty += item.qty;
+        prod.quantity += item.qty;
+      }
+    });
     
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload),
-        redirect: 'follow'
-      });
-      
-      const result = await response.json();
-      
-      if (result.status === "error") {
-        alert("خطأ من السيرفر: " + result.message);
-        return;
+    // If method was Deduct from Debt, update customer debt locally
+    if (selectedMethod === "خصم من الدين") {
+      const cust = customers.find(c => c.id === activeReturnCustomer.id);
+      if (cust) {
+        cust.debt = Math.max(0, cust.debt - grandTotal);
       }
-      
-      if (result.status === "success") {
-        // Locally update state inventory
-        returnCart.forEach(item => {
-          const prod = inventory.find(p => p.id === item.productId);
-          if (prod) {
-            prod.qty += item.qty;
-            prod.quantity += item.qty;
-          }
-        });
-        
-        // If method was Deduct from Debt, update customer debt locally
-        if (selectedMethod === "خصم من الدين") {
-          const cust = customers.find(c => c.id === activeReturnCustomer.id);
-          if (cust) {
-            cust.debt = Math.max(0, cust.debt - grandTotal);
-          }
-        }
-        
-        closeAddReturnModal();
-        alert("تم تسجيل المرتجع وتحديث المخزن والحسابات بنجاح!");
-        renderCustomersList();
-        renderInventoryList();
-        renderSalesGrid();
-      } else {
-        alert("فشل في معالجة المرتجع: استجابة غير معروفة");
-      }
-    } catch (err) {
-      alert("فشل الاتصال بالسيرفر: " + err.message);
     }
+
+    saveAllStatesToLocalStorage();
+    closeAddReturnModal();
+    showArabicToast("تم تسجيل المرتجع وتحديث المخزن بنجاح!", "success");
+    renderCustomersList();
+    renderInventoryList();
+    renderSalesGrid();
+
+    // Sync in background
+    addToSyncQueue(payload);
   });
 }
 
@@ -2656,29 +2790,15 @@ productForm.addEventListener('submit', (e) => {
     quantity: qty
   };
 
-  fetch(BACKEND_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(() => {
-    productForm.reset();
-    closeProductModal();
-    alert('تم الحفظ بنجاح!');
-    renderSalesGrid();
-    renderInventoryList();
-  })
-  .catch(err => {
-    console.error("Error sending product to backend:", err);
-    productForm.reset();
-    closeProductModal();
-    alert('تم الحفظ بنجاح!');
-    renderSalesGrid();
-    renderInventoryList();
-  });
+  saveAllStatesToLocalStorage();
+  productForm.reset();
+  closeProductModal();
+  showArabicToast('تم حفظ المنتج بنجاح!', 'success');
+  renderSalesGrid();
+  renderInventoryList();
+
+  // Sync in background
+  addToSyncQueue(payload);
 });
 
 // SUBMIT: EDIT PRODUCT FORM (UPDATE PRODUCT)
@@ -2713,48 +2833,27 @@ if (editProductForm) {
       quantity: quantity
     };
 
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify(payload),
-        redirect: "follow"
-      });
-      
-      const result = await response.json();
-      
-      if (result.status === "error") {
-        alert("خطأ من السيرفر: " + result.message);
-        return;
-      }
+    // Update local state
+    editingProduct.name = newName;
+    editingProduct.barcode = barcode;
+    editingProduct.sellPrice = sellPrice;
+    editingProduct.price = sellPrice;
+    editingProduct.costPrice = buyPrice;
+    editingProduct.wholesalePrice = buyPrice;
+    editingProduct.category = category;
+    editingProduct.unit = category;
+    editingProduct.qty = quantity;
+    editingProduct.quantity = quantity;
 
-      if (result.status === "success") {
-        // Update local state (inventory represents our products array)
-        editingProduct.name = newName;
-        editingProduct.barcode = barcode;
-        editingProduct.sellPrice = sellPrice;
-        editingProduct.price = sellPrice;
-        editingProduct.costPrice = buyPrice;
-        editingProduct.wholesalePrice = buyPrice;
-        editingProduct.category = category;
-        editingProduct.unit = category; // also update unit to match
-        editingProduct.qty = quantity;
-        editingProduct.quantity = quantity;
+    editingProduct = null;
+    editProductForm.reset();
+    closeEditProductModal();
+    showArabicToast('تم تعديل المادة بنجاح!', 'success');
+    renderSalesGrid();
+    renderInventoryList();
 
-        editingProduct = null;
-        editProductForm.reset();
-        closeEditProductModal();
-        alert('تم تعديل المادة بنجاح!');
-        renderSalesGrid();
-        renderInventoryList();
-      } else {
-        alert("فشل في تعديل المادة: استجابة غير معروفة");
-      }
-    } catch (err) {
-      alert("فشل الاتصال بالسيرفر: " + err.message);
-    }
+    saveAllStatesToLocalStorage();
+    addToSyncQueue(payload);
   });
 }
 
@@ -2783,40 +2882,19 @@ if (editCustomerForm) {
       gps: editingCustomer.gps || ''
     };
 
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8"
-        },
-        body: JSON.stringify(payload),
-        redirect: "follow"
-      });
-      
-      const result = await response.json();
-      
-      if (result.status === "error") {
-        alert("خطأ من السيرفر: " + result.message);
-        return;
-      }
+    // Update local state
+    editingCustomer.name = newShopName;
+    editingCustomer.address = address;
+    editingCustomer.phone = phone;
 
-      if (result.status === "success") {
-        // Update local state
-        editingCustomer.name = newShopName;
-        editingCustomer.address = address;
-        editingCustomer.phone = phone;
+    editingCustomer = null;
+    editCustomerForm.reset();
+    closeEditCustomerModal();
+    showArabicToast('تم تعديل بيانات العميل بنجاح!', 'success');
+    renderCustomersList();
 
-        editingCustomer = null;
-        editCustomerForm.reset();
-        closeEditCustomerModal();
-        alert('تم تعديل بيانات العميل بنجاح!');
-        renderCustomersList();
-      } else {
-        alert("فشل في تعديل بيانات العميل: استجابة غير معروفة");
-      }
-    } catch (err) {
-      alert("فشل الاتصال بالسيرفر: " + err.message);
-    }
+    saveAllStatesToLocalStorage();
+    addToSyncQueue(payload);
   });
 }
 
@@ -2869,27 +2947,14 @@ customerForm.addEventListener('submit', async (e) => {
     gps: gpsVal
   };
 
-  fetch(BACKEND_URL, {
-    method: 'POST',
-    mode: 'no-cors',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(() => {
-    customerForm.reset();
-    closeCustomerModal();
-    alert('تم الحفظ بنجاح!');
-    renderCustomersList();
-  })
-  .catch(err => {
-    console.error("Error sending customer to backend:", err);
-    customerForm.reset();
-    closeCustomerModal();
-    alert('تم الحفظ بنجاح!');
-    renderCustomersList();
-  });
+  saveAllStatesToLocalStorage();
+  customerForm.reset();
+  closeCustomerModal();
+  showArabicToast('تم حفظ العميل بنجاح!', 'success');
+  renderCustomersList();
+
+  // Sync in background
+  addToSyncQueue(payload);
 });
 
 // Complete Cart Checkout triggers Complete sale modal
@@ -2968,7 +3033,7 @@ checkoutConfirmBtn.addEventListener('click', async () => {
         customers.push(customer);
         customerName = theNewName;
 
-        // Post request to create customer
+        // Post request to create customer - queue it!
         const addCustomerPayload = {
           action: "addCustomer",
           shopName: theNewName,
@@ -2977,19 +3042,7 @@ checkoutConfirmBtn.addEventListener('click', async () => {
           debt: 0,
           gps: gpsVal
         };
-
-        try {
-          await fetch(BACKEND_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(addCustomerPayload)
-          });
-        } catch (err) {
-          console.error("Error creating quick customer on backend:", err);
-        }
+        addToSyncQueue(addCustomerPayload);
       }
     } else {
       const customerSelect = document.getElementById('checkout-customer-select');
@@ -3004,7 +3057,7 @@ checkoutConfirmBtn.addEventListener('click', async () => {
 
       // Prompt for GPS if customer lacks location
       if (customer && !customer.gps) {
-        if (confirm("هذا المحل غير مسجل جغرافياً، هل تريد حفظ موقعك الحالي للمحل؟")) {
+        if (await showCustomConfirm("هذا المحل غير مسجل جغرافياً، هل تريد حفظ موقعك الحالي للمحل؟")) {
           showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
           try {
             const gpsVal = await getCurrentLocation();
@@ -3018,19 +3071,10 @@ checkoutConfirmBtn.addEventListener('click', async () => {
               gps: gpsVal
             };
 
-            showArabicToast('جاري حفظ الموقع على السيرفر...', 'info');
-            await fetch(BACKEND_URL, {
-              method: 'POST',
-              mode: 'no-cors',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(updatePayload)
-            });
-
             // Update locally
             customer.gps = gpsVal;
             showArabicToast('تم تسجيل الموقع الجغرافي للمحل بنجاح!', 'success');
+            addToSyncQueue(updatePayload);
           } catch (err) {
             console.error("GPS error during checkout confirmation:", err);
             showArabicToast("فشل حفظ موقع GPS للمحل: " + err.message, "error");
@@ -3091,27 +3135,17 @@ checkoutConfirmBtn.addEventListener('click', async () => {
       sellerName: activeUser ? activeUser['اسم المستخدم'] : 'بائع عام'
     };
 
-    // 8. Submit sale request
-    try {
-      await fetch(BACKEND_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(addSalePayload)
-      });
-    } catch (err) {
-      console.error("Error sending sale to backend:", err);
-    }
-
-    // 9. Clean up and open Options Modal
+    // 8. Clean up and open Options Modal
     cart = [];
     updateCartBadge();
     renderSalesGrid();
     renderCustomersList();
     closeCheckoutModal();
+    saveAllStatesToLocalStorage();
     openInvoiceOptionsModal(saleObject, customer);
+
+    // 9. Sync payload in background
+    addToSyncQueue(addSalePayload);
 
   } catch (error) {
     console.error("Critical error in checkout confirm handler:", error);
@@ -3281,9 +3315,15 @@ const initSpeechRecognition = () => {
 
   recognition = new SpeechRecognition();
   recognition.continuous = true;
-  recognition.interimResults = false;
+  recognition.interimResults = true;
   recognition.maxAlternatives = 3;
-  recognition.lang = 'ar-IQ';
+  
+  // Set Arabic (Iraqi) language with Saudi Arabic and generic Arabic fallbacks handled by the speech engine
+  try {
+    recognition.lang = 'ar-IQ';
+  } catch (e) {
+    recognition.lang = 'ar-SA';
+  }
 
   recognition.onstart = () => {
     isRecording = true;
@@ -3293,15 +3333,14 @@ const initSpeechRecognition = () => {
   };
 
   recognition.onresult = (event) => {
-    // Collect all transcript segments if continuous is active
-    let transcript = '';
+    let finalTranscript = '';
     for (let i = event.resultIndex; i < event.results.length; ++i) {
       if (event.results[i].isFinal) {
-        transcript += event.results[i][0].transcript + ' ';
+        finalTranscript += event.results[i][0].transcript + ' ';
       }
     }
-    if (aiTextInput && transcript) {
-      aiTextInput.value = (aiTextInput.value + ' ' + transcript.trim()).trim();
+    if (aiTextInput && finalTranscript) {
+      aiTextInput.value = (aiTextInput.value + ' ' + finalTranscript.trim()).trim();
     }
   };
 
@@ -3465,12 +3504,30 @@ const executeAiCommand = async () => {
     console.log("AI analysis response result:", result);
     
     if (result.status === "error") {
-      alert("خطأ من السيرفر: " + result.message);
+      await showCustomAlert("خطأ من السيرفر: " + result.message);
       return;
     }
 
     if (result.status === "success" && result.aiData) {
       const aiData = result.aiData;
+      
+      // Client-side scanning fallback:
+      // Scan local inventory names against transcription text; default quantity to 1 if the item name is present in transcription but absent from the backend parsed aiData.items.
+      if (!aiData.items) aiData.items = [];
+      inventory.forEach(prod => {
+        if (text.toLowerCase().includes(prod.name.toLowerCase())) {
+          const alreadyMatched = aiData.items.some(aiItem => 
+            aiItem.name.toLowerCase().includes(prod.name.toLowerCase()) || 
+            prod.name.toLowerCase().includes(aiItem.name.toLowerCase())
+          );
+          if (!alreadyMatched) {
+            aiData.items.push({
+              name: prod.name,
+              qty: 1
+            });
+          }
+        }
+      });
       
       if (aiData.customerName) {
         const match = customers.find(c => 
@@ -3545,12 +3602,12 @@ const executeAiCommand = async () => {
       openCheckoutModal(true);
       showArabicToast("تم ملء الفاتورة بواسطة الذكاء الاصطناعي بنجاح!", "success");
     } else {
-      alert("فشل في تحليل النص: استجابة غير معروفة");
+      await showCustomAlert("فشل في تحليل النص: استجابة غير معروفة");
     }
   } catch (err) {
     console.error("AI assistant network/fetch error details:", err);
     showArabicToast("فشل الاتصال بمساعد الذكاء الاصطناعي: " + err.message, "error");
-    alert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
+    await showCustomAlert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
   } finally {
     if (aiLoadingState) aiLoadingState.classList.add('hidden');
     if (aiExecuteBtn) aiExecuteBtn.disabled = false;
@@ -3567,36 +3624,203 @@ if (smartAiClose) smartAiClose.addEventListener('click', closeSmartAiModal);
 if (aiMicBtn) aiMicBtn.addEventListener('click', toggleRecording);
 if (aiExecuteBtn) aiExecuteBtn.addEventListener('click', executeAiCommand);
 
+// --- CUSTOM CUSTOMER DROPDOWN BINDINGS & SELECTORS ---
+const customCustomerDropdownTrigger = document.getElementById('custom-customer-dropdown-trigger');
+const customCustomerDropdownLabel = document.getElementById('custom-customer-dropdown-label');
+const customCustomerDropdownMenu = document.getElementById('custom-customer-dropdown-menu');
+const customCustomerDropdownSearch = document.getElementById('custom-customer-dropdown-search');
+const customCustomerDropdownItems = document.getElementById('custom-customer-dropdown-items');
+const customCustomerDropdownContainer = document.getElementById('custom-customer-dropdown-container');
+
+if (customCustomerDropdownTrigger) {
+  customCustomerDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isHidden = customCustomerDropdownMenu.classList.contains('hidden');
+    if (isHidden) {
+      customCustomerDropdownMenu.classList.remove('hidden');
+      customCustomerDropdownSearch.value = '';
+      renderCustomCustomerDropdownItems();
+      customCustomerDropdownSearch.focus();
+    } else {
+      customCustomerDropdownMenu.classList.add('hidden');
+    }
+  });
+}
+
+if (customCustomerDropdownSearch) {
+  customCustomerDropdownSearch.addEventListener('input', () => {
+    renderCustomCustomerDropdownItems();
+  });
+  customCustomerDropdownSearch.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+}
+
+document.addEventListener('click', (e) => {
+  if (customCustomerDropdownContainer && !customCustomerDropdownContainer.contains(e.target)) {
+    if (customCustomerDropdownMenu) {
+      customCustomerDropdownMenu.classList.add('hidden');
+    }
+  }
+});
+
+const renderCustomCustomerDropdownItems = () => {
+  if (!customCustomerDropdownItems) return;
+  customCustomerDropdownItems.innerHTML = '';
+  const query = customCustomerDropdownSearch.value.toLowerCase().trim();
+  
+  const filtered = customers.filter(c => 
+    c.name.toLowerCase().includes(query) || 
+    c.address.toLowerCase().includes(query)
+  );
+
+  if (filtered.length === 0) {
+    customCustomerDropdownItems.innerHTML = `
+      <div class="px-4.5 py-3 text-xs text-gray-400 text-center font-bold">لا يوجد نتائج</div>
+    `;
+    return;
+  }
+
+  filtered.forEach(c => {
+    const div = document.createElement('div');
+    div.className = `px-4.5 py-2.5 text-xs text-gray-800 font-semibold text-right hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-50/50 last:border-b-0 flex justify-between items-center ${checkoutCustomerSelect.value == c.id ? 'bg-[#1e5631]/5 text-[#1e5631] font-black' : ''}`;
+    div.innerHTML = `
+      <span>${c.name} <span class="text-[9px] text-gray-400 font-bold mr-1">(${c.address})</span></span>
+      ${checkoutCustomerSelect.value == c.id ? '<i class="fa-solid fa-circle-check text-[10px] text-[#1e5631]"></i>' : ''}
+    `;
+    
+    div.addEventListener('click', () => {
+      checkoutCustomerSelect.value = c.id;
+      customCustomerDropdownLabel.textContent = `${c.name} (${c.address})`;
+      customCustomerDropdownMenu.classList.add('hidden');
+      checkoutCustomerSelect.dispatchEvent(new Event('change'));
+    });
+    
+    customCustomerDropdownItems.appendChild(div);
+  });
+};
+
+const selectCustomerInDropdown = (customerId) => {
+  checkoutCustomerSelect.value = customerId;
+  const cust = customers.find(c => c.id == customerId);
+  if (cust && customCustomerDropdownLabel) {
+    customCustomerDropdownLabel.textContent = `${cust.name} (${cust.address})`;
+  }
+};
+
+// --- IN-FORM BARCODE SCANNER BINDINGS ---
+const pBarcodeScanBtn = document.getElementById('p-barcode-scan-btn');
+const editPBarcodeScanBtn = document.getElementById('edit-p-barcode-scan-btn');
+let scannerTarget = 'cart'; // 'cart', 'addProductBarcode', or 'editProductBarcode'
+
+if (pBarcodeScanBtn) {
+  pBarcodeScanBtn.addEventListener('click', () => {
+    scannerTarget = 'addProductBarcode';
+    startCameraScanner();
+  });
+}
+
+if (editPBarcodeScanBtn) {
+  editPBarcodeScanBtn.addEventListener('click', () => {
+    scannerTarget = 'editProductBarcode';
+    startCameraScanner();
+  });
+}
+
 // --- CAMERA BARCODE SCANNER FUNCTIONALITY ---
-let html5QrcodeScanner = null;
+let html5Qrcode = null;
 
 const startCameraScanner = () => {
   if (cameraScannerModal) {
     cameraScannerModal.classList.remove('hidden');
   }
 
-  // Initialize Html5QrcodeScanner
-  html5QrcodeScanner = new Html5QrcodeScanner(
-    "reader",
-    {
-      fps: 10,
-      qrbox: 250
-    },
-    /* verbose= */ false
-  );
-
-  html5QrcodeScanner.render(onCameraScanSuccess, onCameraScanFailure);
+  Html5Qrcode.getCameras().then(devices => {
+    let cameraConfig = { facingMode: "environment" };
+    
+    if (devices && devices.length > 0) {
+      // Prioritize primary rear camera lens device id
+      const rearCam = devices.find(d => 
+        d.label.toLowerCase().includes('back') || 
+        d.label.toLowerCase().includes('rear') || 
+        d.label.toLowerCase().includes('environment')
+      );
+      if (rearCam) {
+        cameraConfig = rearCam.id;
+      }
+    }
+    
+    html5Qrcode = new Html5Qrcode("reader");
+    html5Qrcode.start(
+      cameraConfig,
+      {
+        fps: 30, // scan at high frame rate
+        qrbox: (width, height) => {
+          const size = Math.min(width, height) * 0.7;
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.777778, // widescreen mode
+        videoConstraints: {
+          facingMode: "environment",
+          width: { min: 1280, ideal: 1920, max: 1920 },
+          height: { min: 720, ideal: 1080, max: 1080 }
+        }
+      },
+      onCameraScanSuccess,
+      onCameraScanFailure
+    ).catch(err => {
+      console.error("Error starting Html5Qrcode:", err);
+      // Direct environment fallback
+      html5Qrcode.start(
+        { facingMode: "environment" },
+        {
+          fps: 30,
+          qrbox: { width: 250, height: 250 },
+          videoConstraints: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        },
+        onCameraScanSuccess,
+        onCameraScanFailure
+      ).catch(e => {
+        showArabicToast("فشل فتح الكاميرا: " + e.message, "error");
+      });
+    });
+  }).catch(err => {
+    console.error("Error listing cameras:", err);
+    // Direct environment fallback if getCameras fails
+    html5Qrcode = new Html5Qrcode("reader");
+    html5Qrcode.start(
+      { facingMode: "environment" },
+      {
+        fps: 30,
+        qrbox: { width: 250, height: 250 },
+        videoConstraints: {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      },
+      onCameraScanSuccess,
+      onCameraScanFailure
+    ).catch(e => {
+      showArabicToast("فشل فتح الكاميرا: " + e.message, "error");
+    });
+  });
 };
 
 const stopCameraScanner = () => {
-  if (html5QrcodeScanner) {
-    html5QrcodeScanner.clear()
+  if (html5Qrcode) {
+    html5Qrcode.stop()
       .then(() => {
-        html5QrcodeScanner = null;
+        html5Qrcode = null;
         if (cameraScannerModal) cameraScannerModal.classList.add('hidden');
       })
       .catch(err => {
-        console.error("Failed to clear html5QrcodeScanner:", err);
+        console.error("Failed to stop html5Qrcode:", err);
+        html5Qrcode = null;
         if (cameraScannerModal) cameraScannerModal.classList.add('hidden');
       });
   } else {
@@ -3607,32 +3831,50 @@ const stopCameraScanner = () => {
 const onCameraScanSuccess = (decodedText, decodedResult) => {
   console.log(`Barcode scanned successfully: ${decodedText}`, decodedResult);
   
-  // Immediately stop the scanner and hide the modal
+  // Immediately stop the scanner
   stopCameraScanner();
 
-  // Search the local products array for a product where product.barcode === decodedText
-  const matchedProduct = products.find(p => String(p.barcode || '').trim() === String(decodedText || '').trim());
-  if (matchedProduct) {
-    // Automatically add the product to the cart (triggering the existing add-to-cart function)
-    if (matchedProduct.quantity > 0) {
-      adjustCartItemQty(matchedProduct.id, 1);
-      showArabicToast("تمت إضافة المنتج", "success");
-    } else {
-      showArabicToast(`عذراً، المنتج "${matchedProduct.name}" نفد من المخزن!`, "error");
+  if (scannerTarget === 'addProductBarcode') {
+    const input = document.getElementById('p-barcode');
+    if (input) {
+      input.value = decodedText;
+      showArabicToast("تم قراءة الباركود بنجاح", "success");
+    }
+  } else if (scannerTarget === 'editProductBarcode') {
+    const input = document.getElementById('edit-p-barcode');
+    if (input) {
+      input.value = decodedText;
+      showArabicToast("تم قراءة الباركود بنجاح", "success");
     }
   } else {
-    // Display error toast
-    showArabicToast("المنتج غير موجود في المستودع", "error");
+    // Search the local products array for a product barcode match
+    const matchedProduct = products.find(p => String(p.barcode || '').trim() === String(decodedText || '').trim());
+    if (matchedProduct) {
+      if (matchedProduct.quantity > 0) {
+        adjustCartItemQty(matchedProduct.id, 1);
+        showArabicToast("تمت إضافة المنتج للسلة", "success");
+      } else {
+        showArabicToast(`عذراً، المنتج "${matchedProduct.name}" نفد من المخزن!`, "error");
+      }
+    } else {
+      showArabicToast("المنتج غير موجود في المستودع", "error");
+    }
   }
 };
 
 const onCameraScanFailure = (error) => {
-  // Silent callback for frame scanning failures (runs frequently, so we don't log to avoid noise)
+  // Silent scan failure callback
 };
 
 // Bind scanner and local search listeners
-if (salesScanBtn) salesScanBtn.addEventListener('click', startCameraScanner);
-if (headerCameraBtn) headerCameraBtn.addEventListener('click', startCameraScanner);
+if (salesScanBtn) salesScanBtn.addEventListener('click', () => {
+  scannerTarget = 'cart';
+  startCameraScanner();
+});
+if (headerCameraBtn) headerCameraBtn.addEventListener('click', () => {
+  scannerTarget = 'cart';
+  startCameraScanner();
+});
 if (cameraScannerCloseX) cameraScannerCloseX.addEventListener('click', stopCameraScanner);
 if (cameraScannerCloseBtn) cameraScannerCloseBtn.addEventListener('click', stopCameraScanner);
 if (salesSearchBar) {
@@ -3645,7 +3887,6 @@ if (salesSearchBar) {
 const applyRBACRules = () => {
   if (!activeUser) return;
   if (activeUser['الصلاحية'] === 'بائع') {
-    // Hide delete buttons: delete-btn, btn-delete-product, btn-delete-customer, etc.
     const deleteButtons = document.querySelectorAll('.delete-btn, .btn-delete-product, .btn-delete-customer');
     deleteButtons.forEach(btn => {
       btn.style.setProperty('display', 'none', 'important');
@@ -3663,24 +3904,20 @@ const handleLogin = () => {
     return;
   }
 
-  // Find user matching credentials
   const user = users.find(u => u['اسم المستخدم'] === username && String(u['كلمة المرور']) === password);
   if (user) {
     activeUser = user;
     sessionStorage.setItem('activeUser', JSON.stringify(user));
 
-    // Display app UI
     loginContainer.style.display = 'none';
     appContainer.style.display = 'flex';
     headerUserName.textContent = activeUser['اسم المستخدم'];
 
-    // Clear inputs
     loginUsernameInput.value = '';
     loginPasswordInput.value = '';
 
     showArabicToast(`أهلاً بك، ${activeUser['اسم المستخدم']}`, 'success');
 
-    // Trigger complete renders to enforce RBAC rules on the elements
     renderInventoryList();
     renderCustomersList();
     renderSalesGrid();
@@ -3704,6 +3941,14 @@ if (loginPasswordInput) {
 
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
+  // 1. Instantly load states from local cache (0ms delay UI)
+  loadStatesFromLocalStorage();
+  
+  // 2. Render initial view grids immediately
+  renderInventoryList();
+  renderCustomersList();
+  renderSalesGrid();
+
   // Check active user session
   const storedUser = sessionStorage.getItem('activeUser');
   if (storedUser) {
@@ -3726,7 +3971,12 @@ const initApp = () => {
   // Start on Sales View
   switchView('sales');
   updateCartBadge();
-  loadInitialData();
+
+  // 3. Fetch latest data in the background silently
+  loadInitialData(true);
+  
+  // 4. Trigger sync for any pending offline items
+  processSyncQueue();
 };
 
 if (document.readyState === 'loading') {
@@ -3734,3 +3984,4 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
+

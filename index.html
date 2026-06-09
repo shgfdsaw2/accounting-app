@@ -2,8 +2,12 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>نظام المبيعات والمخازن الذكي</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e5631">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <!-- Google Fonts - Cairo -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,10 +26,10 @@
     }
   </style>
 </head>
-<body class="desktop-wrapper min-h-screen flex items-center justify-center py-0 md:py-6 px-0 md:px-4 bg-gray-100 overflow-x-hidden">
+<body class="desktop-wrapper min-h-[100dvh] h-[100dvh] flex items-center justify-center py-0 md:py-6 px-0 md:px-4 bg-gray-100 overflow-x-hidden">
 
   <!-- Main Mobile viewport simulator -->
-  <div class="relative w-full max-w-md bg-[#f4f6f5] md:shadow-2xl md:rounded-3xl border border-gray-200 flex flex-col overflow-hidden min-h-screen md:min-h-[820px] md:h-[820px]">
+  <div class="relative w-full max-w-md bg-[#f4f6f5] md:shadow-2xl md:rounded-3xl border border-gray-200 flex flex-col overflow-hidden min-h-[100dvh] h-[100dvh] md:min-h-[820px] md:h-[820px]">
     
     <!-- LOGIN UI (Shown by default) -->
     <div id="login-container" class="flex flex-col items-center justify-center flex-grow p-6 space-y-6 bg-white select-none h-full">
@@ -338,12 +342,29 @@
             
             <!-- Existing Dropdown select wrapper -->
             <div id="checkout-customer-select-wrapper" class="relative">
-              <select id="checkout-customer-select" class="w-full bg-[#f4f6f5] text-gray-700 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none appearance-none cursor-pointer font-semibold">
+              <!-- Hidden native select for compatibility -->
+              <select id="checkout-customer-select" class="hidden">
                 <!-- Dynamic customers options -->
               </select>
-              <span class="absolute inset-y-0 left-4 flex items-center pointer-events-none text-gray-400 text-xs">
-                <i class="fa-solid fa-chevron-down"></i>
-              </span>
+              
+              <!-- Custom CSS Dropdown Facade -->
+              <div class="relative w-full" id="custom-customer-dropdown-container">
+                <button type="button" id="custom-customer-dropdown-trigger" class="w-full flex justify-between items-center bg-[#f4f6f5] text-gray-750 text-xs px-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none font-semibold cursor-pointer text-right transition-all hover:bg-gray-200/50">
+                  <span id="custom-customer-dropdown-label">اختر العميل / المحل...</span>
+                  <span class="text-gray-400 text-xs mr-2">
+                    <i class="fa-solid fa-chevron-down"></i>
+                  </span>
+                </button>
+                
+                <div id="custom-customer-dropdown-menu" class="absolute left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-2xl shadow-xl z-[90] hidden flex-col overflow-hidden max-h-60 transition-all duration-200">
+                  <div class="p-2 border-b border-gray-100 shrink-0">
+                    <input type="text" id="custom-customer-dropdown-search" placeholder="بحث عن عميل..." class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3 py-2 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+                  </div>
+                  <div id="custom-customer-dropdown-items" class="overflow-y-auto flex-1 no-scrollbar max-h-48 py-1">
+                    <!-- Custom list items rendered dynamically -->
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- Quick Add Customer Input wrapper (Hidden by default) -->
@@ -437,15 +458,15 @@
           <input type="text" id="p-name" required placeholder="مثال: دجاج تكا 12x" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
         </div>
 
-        <!-- Barcode -->
-        <div class="flex gap-2 items-end select-none">
-          <div class="flex-1 space-y-1 select-text">
-            <label for="p-barcode" class="text-[10px] font-black text-gray-400 block">باركود المنتج</label>
-            <input type="text" id="p-barcode" value="622100987123" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        <!-- Barcode with inside-input scanner button -->
+        <div class="space-y-1 select-none">
+          <label for="p-barcode" class="text-[10px] font-black text-gray-400 block">باركود المنتج</label>
+          <div class="relative flex items-center">
+            <input type="text" id="p-barcode" value="622100987123" class="w-full bg-[#f4f6f5] text-gray-800 text-xs pl-12 pr-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold select-text">
+            <button type="button" id="p-barcode-scan-btn" class="absolute left-2.5 w-8 h-8 rounded-lg bg-[#e8ecea] text-[#1e5631] hover:bg-[#1e5631]/10 flex items-center justify-center cursor-pointer transition-colors" title="مسح باركود بالكاميرا">
+              <i class="fa-solid fa-camera"></i>
+            </button>
           </div>
-          <button type="button" class="w-11 h-11 rounded-xl bg-[#e8ecea] text-[#1e5631] hover:bg-[#1e5631]/10 flex items-center justify-center cursor-pointer transition-colors shadow-sm" title="مسح تلقائي">
-            <i class="fa-solid fa-barcode"></i>
-          </button>
         </div>
 
         <!-- Price grids -->
@@ -966,10 +987,15 @@
             <input type="text" id="edit-p-name" required class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
           </div>
           
-          <!-- Barcode -->
-          <div class="space-y-1">
+          <!-- Barcode with inside-input scanner button -->
+          <div class="space-y-1 select-none">
             <label for="edit-p-barcode" class="text-[10px] font-black text-gray-400 block">الباركود</label>
-            <input type="text" id="edit-p-barcode" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            <div class="relative flex items-center">
+              <input type="text" id="edit-p-barcode" class="w-full bg-[#f4f6f5] text-gray-800 text-xs pl-12 pr-3.5 py-3.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold select-text">
+              <button type="button" id="edit-p-barcode-scan-btn" class="absolute left-2.5 w-8 h-8 rounded-lg bg-[#e8ecea] text-[#1e5631] hover:bg-[#1e5631]/10 flex items-center justify-center cursor-pointer transition-colors" title="مسح باركود بالكاميرا">
+                <i class="fa-solid fa-camera"></i>
+              </button>
+            </div>
           </div>
 
           <!-- Price grids -->
