@@ -37,11 +37,15 @@ body {
 
 /* Modal and Bottom Sheet Animations */
 .modal-overlay {
-  transition: opacity 0.22s ease-out;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity;
 }
 
 .modal-content {
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform;
+  transform: translate3d(0, 100%, 0);
+  backface-visibility: hidden;
 }
 
 .modal-hidden {
@@ -50,7 +54,7 @@ body {
 }
 
 .modal-hidden .modal-content {
-  transform: translateY(100%);
+  transform: translate3d(0, 100%, 0);
 }
 
 .modal-visible {
@@ -59,7 +63,57 @@ body {
 }
 
 .modal-visible .modal-content {
-  transform: translateY(0);
+  transform: translate3d(0, 0, 0);
+}
+
+/* GPU Acceleration for inline-transitioned modals to ensure buttery smooth animation */
+#add-product-modal,
+#add-customer-modal,
+#sales-history-modal,
+#customer-profile-modal,
+#invoice-details-modal,
+#purchase-history-modal,
+#purchase-details-modal,
+#add-purchase-modal,
+#supplier-debts-modal,
+#edit-product-modal,
+#edit-customer-modal,
+#add-return-modal,
+#invoice-options-modal,
+#smart-ai-modal,
+#camera-scanner-modal {
+  will-change: opacity;
+  backface-visibility: hidden;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+#add-product-content,
+#add-customer-content,
+#sales-history-content,
+#customer-profile-content,
+#invoice-details-content,
+#purchase-history-content,
+#purchase-details-content,
+#add-purchase-content,
+#supplier-debts-content,
+#edit-product-content,
+#edit-customer-content,
+#add-return-content,
+#invoice-options-content,
+#smart-ai-content,
+#camera-scanner-content {
+  will-change: transform;
+  backface-visibility: hidden;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Expandable Accordion UI transitions */
+.accordion-arrow {
+  transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.accordion-content {
+  transition: max-height 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
 }
 
 /* View transitions */
@@ -216,4 +270,144 @@ body {
     border: none !important;
   }
 }
+
+/* User login state layout selectors */
+.user-logged-in #login-container {
+  display: none !important;
+}
+.user-logged-in #app-container {
+  display: flex !important;
+}
+
+/* Dark theme overrides for Tailwind classes and custom components */
+.dark body {
+  background-color: #121212 !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .desktop-wrapper > div {
+  background-color: #121212 !important;
+  border-color: #2d2d2d !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark #login-container,
+.dark #app-container,
+.dark header,
+.dark main,
+.dark nav {
+  background-color: #121212 !important;
+  color: #f3f4f6 !important;
+  border-color: #2d2d2d !important;
+}
+
+.dark header {
+  background-color: #113820 !important; /* Slightly darker green header for premium dark look */
+}
+
+.dark nav {
+  background-color: #1a1a1a !important;
+  border-color: #2a2a2a !important;
+}
+
+.dark .bg-white {
+  background-color: #1e1e1e !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .bg-[#f4f6f5],
+.dark .bg-[#f8f9fa],
+.dark .bg-[#f4f6f5]/40,
+.dark .bg-gray-50,
+.dark .bg-gray-100 {
+  background-color: #222222 !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .bg-[#ebf0ee],
+.dark .bg-[#e8ecea],
+.dark .bg-[#e8ecea]/40 {
+  background-color: #2d2d2d !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-750,
+.dark .text-gray-700 {
+  color: #f3f4f6 !important;
+}
+
+.dark .text-gray-500,
+.dark .text-gray-450,
+.dark .text-gray-400 {
+  color: #9ca3af !important;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-250,
+.dark .border-gray-150 {
+  border-color: #2d2d2d !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #2d2d2d !important;
+  color: #ffffff !important;
+  border: 1px solid #3d3d3d !important;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #1e5631 !important;
+  background-color: #333333 !important;
+}
+
+.dark .custom-modal-window {
+  background-color: #1e1e1e !important;
+  color: #ffffff !important;
+  border-color: #2d2d2d !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.dark #custom-customer-dropdown-menu {
+  background-color: #1e1e1e !important;
+  border-color: #2d2d2d !important;
+}
+
+.dark #custom-customer-dropdown-items div:hover {
+  background-color: #2d2d2d !important;
+}
+
+.dark #custom-customer-dropdown-trigger {
+  background-color: #2d2d2d !important;
+  border-color: #3d3d3d !important;
+  color: #f3f4f6 !important;
+}
+
+.dark .text-gray-650 {
+  color: #e5e7eb !important;
+}
+
+.dark .btn-gps-relocate {
+  background-color: #2d2d2d !important;
+  border-color: #3d3d3d !important;
+}
+
+.dark .btn-edit-customer,
+.dark .btn-edit-product {
+  background-color: #2d2d2d !important;
+  color: #a3a3a3 !important;
+}
+
+.dark .btn-edit-customer:hover,
+.dark .btn-edit-product:hover {
+  background-color: #3d3d3d !important;
+  color: #ffffff !important;
+}
+
+
 

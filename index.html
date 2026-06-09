@@ -4,7 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>نظام المبيعات والمخازن الذكي</title>
+  <script>
+    // Immediate check for persistent login and dark theme to avoid screen flash
+    (function() {
+      if (localStorage.getItem('activeUser')) {
+        document.documentElement.classList.add('user-logged-in');
+      }
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
   <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192x192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icon-512x512.png">
   <meta name="theme-color" content="#1e5631">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -23,6 +38,13 @@
   <style>
     body {
       font-family: 'Cairo', sans-serif;
+    }
+    /* Instant CSS login bypass override to prevent screen flashing */
+    .user-logged-in #login-container {
+      display: none !important;
+    }
+    .user-logged-in #app-container {
+      display: flex !important;
     }
   </style>
 </head>
@@ -63,26 +85,40 @@
     
     <!-- Top System/Action Header Bar -->
     <header class="relative bg-[#1e5631] text-white px-5 py-4 flex justify-between items-center z-10 shrink-0 select-none shadow-md">
-      <!-- Right Side: Menu button -->
-      <div class="relative">
-        <button id="header-menu-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors">
-          <i class="fa-solid fa-ellipsis-vertical text-lg"></i>
-        </button>
-        <!-- Dropdown menu -->
-        <div id="header-menu-dropdown" class="absolute right-0 mt-2 bg-white text-gray-800 rounded-2xl shadow-xl border border-gray-100 py-2 w-48 z-40 hidden opacity-0 transition-all duration-200 transform scale-95 origin-top-right">
-          <button id="menu-sales-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
-            <i class="fa-solid fa-receipt text-gray-500"></i>
-            <span>سجل البيع</span>
+      <!-- Right Side: Menu button and direct actions -->
+      <div class="flex items-center gap-1.5">
+        <div class="relative">
+          <button id="header-menu-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors">
+            <i class="fa-solid fa-ellipsis-vertical text-lg"></i>
           </button>
-          <button id="menu-purchase-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
-            <i class="fa-solid fa-truck-ramp-box text-gray-500"></i>
-            <span>سجل المشتريات</span>
-          </button>
-          <button id="menu-supplier-debts-btn" class="hidden w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
-            <i class="fa-solid fa-file-invoice-dollar text-gray-500"></i>
-            <span>ديون الشركات / الموردين</span>
-          </button>
+          <!-- Dropdown menu -->
+          <div id="header-menu-dropdown" class="absolute right-0 mt-2 bg-white text-gray-800 rounded-2xl shadow-xl border border-gray-100 py-2 w-48 z-40 hidden opacity-0 transition-all duration-200 transform scale-95 origin-top-right">
+            <button id="menu-sales-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+              <i class="fa-solid fa-receipt text-gray-500"></i>
+              <span>سجل البيع</span>
+            </button>
+            <button id="menu-purchase-history-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+              <i class="fa-solid fa-truck-ramp-box text-gray-500"></i>
+              <span>سجل المشتريات</span>
+            </button>
+            <button id="menu-supplier-debts-btn" class="hidden w-full text-right px-4.5 py-3 text-xs font-bold hover:bg-gray-50 flex items-center gap-2 cursor-pointer transition-colors">
+              <i class="fa-solid fa-file-invoice-dollar text-gray-500"></i>
+              <span>ديون الشركات / الموردين</span>
+            </button>
+            <button id="menu-logout-btn" class="w-full text-right px-4.5 py-3 text-xs font-bold text-red-650 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors">
+              <i class="fa-solid fa-right-from-bracket text-red-500"></i>
+              <span>تسجيل الخروج</span>
+            </button>
+          </div>
         </div>
+        <!-- Direct Header Sales Log Button -->
+        <button id="header-sales-history-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors text-white" title="سجل البيع">
+          <i class="fa-solid fa-receipt text-lg"></i>
+        </button>
+        <!-- Direct Header Logout Button -->
+        <button id="header-logout-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 text-red-300 hover:text-red-200 flex items-center justify-center cursor-pointer transition-colors" title="تسجيل الخروج">
+          <i class="fa-solid fa-right-from-bracket text-lg"></i>
+        </button>
       </div>
       <!-- User name display -->
       <span id="header-user-name" class="text-[10px] font-black bg-white/20 px-2.5 py-1 rounded-lg select-none mr-2"></span>
@@ -94,8 +130,12 @@
         <input type="text" id="global-search-bar" placeholder="ابحث هنا..." class="w-full bg-white/10 text-white text-xs pl-3 pr-8.5 py-2 rounded-xl focus:outline-none focus:bg-white/20 placeholder:text-white/50 transition-all font-medium border border-white/10">
       </div>
 
-      <!-- Left Side: Purchase Button, Add Button (+), Camera Icon, Smart Assistant (🎤) and Cart Button (with dynamic badge) -->
+      <!-- Left Side: Dark Mode Toggle, Smart Assistant (🎤), Purchase Button, Add Button (+), Camera Icon, and Cart Button (with dynamic badge) -->
       <div class="flex items-center gap-2">
+        <!-- Dark Mode Toggle Button -->
+        <button id="header-dark-mode-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="تبديل الوضع الليلي">
+          <i class="fa-solid fa-moon text-lg"></i>
+        </button>
         <button id="header-smart-ai-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors text-yellow-300" title="المساعد الذكي">
           <i class="fa-solid fa-microphone text-lg"></i>
         </button>
@@ -383,10 +423,16 @@
             <input type="text" id="checkout-date-input" readonly class="w-full bg-gray-50 text-gray-500 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none font-semibold select-none cursor-not-allowed">
           </div>
 
-          <!-- Discount Input -->
-          <div class="space-y-1">
-            <label for="checkout-discount" class="text-[10px] font-black text-gray-400 block">قيمة الخصم ($)</label>
-            <input type="number" id="checkout-discount" min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          <!-- Discount & Savings Input Row -->
+          <div class="flex gap-3">
+            <div class="flex-grow space-y-1">
+              <label for="checkout-discount" class="text-[10px] font-black text-gray-400 block">قيمة الخصم ($)</label>
+              <input type="number" id="checkout-discount" min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            </div>
+            <div class="flex-grow space-y-1">
+              <label for="checkout-savings" class="text-[10px] font-black text-gray-400 block">مبلغ الاستفادة ($)</label>
+              <input type="number" id="checkout-savings" min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            </div>
           </div>
 
           <!-- Received Amount & Debt Logic Indicator -->

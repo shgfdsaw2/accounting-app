@@ -1,3 +1,12 @@
+// Register Service Worker for offline capability
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(reg => console.log('Service Worker registered successfully:', reg.scope))
+      .catch(err => console.error('Service Worker registration failed:', err));
+  });
+}
+
 // --- STATE DATA ---
 let inventory = [];
 let products = inventory;
@@ -7,7 +16,7 @@ let cart = [];
 let salesHistory = [];
 let purchases = [];
 let purchaseCart = [];
-let isLoading = true;
+let isLoading = false;
 let hasError = false;
 let activeProfileCustomer = null;
 let editingProduct = null;
@@ -334,6 +343,7 @@ const checkoutFinalVal = document.getElementById('checkout-final-val');
 const checkoutCustomerSelect = document.getElementById('checkout-customer-select');
 const checkoutDateInput = document.getElementById('checkout-date-input');
 const checkoutDiscount = document.getElementById('checkout-discount');
+const checkoutSavings = document.getElementById('checkout-savings');
 const checkoutReceivedInput = document.getElementById('checkout-received-input');
 const checkoutDebtBadge = document.getElementById('checkout-debt-badge');
 const checkoutConfirmBtn = document.getElementById('checkout-confirm-btn');
@@ -503,6 +513,9 @@ const loginUsernameInput = document.getElementById('login-username');
 const loginPasswordInput = document.getElementById('login-password');
 const loginSubmitBtn = document.getElementById('login-submit-btn');
 const headerUserName = document.getElementById('header-user-name');
+const headerSalesHistoryBtn = document.getElementById('header-sales-history-btn');
+const headerLogoutBtn = document.getElementById('header-logout-btn');
+const headerDarkModeBtn = document.getElementById('header-dark-mode-btn');
 
 // --- VIEW NAVIGATION ROUTING ---
 const views = {
@@ -750,19 +763,23 @@ const loadInitialData = (isSilent = false) => {
       renderInventoryList();
     })
     .catch(err => {
+      console.warn("Background fetch sync failed:", err);
       isLoading = false;
-      hasError = true;
-
-      renderSalesGrid();
-      renderCustomersList();
-      renderInventoryList();
-      showArabicToast('فشل تحميل البيانات من السيرفر!', 'error');
+      
+      // Genuinely silent background sync failures: only set hasError and show toast if not silent
+      if (!isSilent) {
+        hasError = true;
+        renderSalesGrid();
+        renderCustomersList();
+        renderInventoryList();
+        showArabicToast('فشل تحميل البيانات من السيرفر!', 'error');
+      }
     });
 };
 
 // --- RENDER COMPONENT: SALES POS GRID ---
 const renderSalesGrid = () => {
-  if (isLoading) {
+  if (isLoading && inventory.length === 0) {
     salesProductsGrid.innerHTML = `
       <div class="col-span-2 text-center py-12">
         <i class="fa-solid fa-spinner fa-spin text-2xl text-[#1e5631] mb-2 block"></i>
@@ -772,7 +789,7 @@ const renderSalesGrid = () => {
     salesProductsCount.textContent = '...';
     return;
   }
-  if (hasError) {
+  if (hasError && inventory.length === 0) {
     salesProductsGrid.innerHTML = `
       <div class="col-span-2 text-center py-12">
         <i class="fa-solid fa-circle-exclamation text-2xl text-red-500 mb-2 block"></i>
@@ -901,6 +918,38 @@ const closeHeaderMenuDropdown = () => {
 };
 
 // --- SALES HISTORY MODAL ACTIONS ---
+const getDateLabel = (dateStr) => {
+  if (!dateStr) return 'تاريخ غير معروف';
+  
+  const today = new Date();
+  const todayStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const yesterdayStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth() + 1).padStart(2, '0') + '-' + String(yesterday.getDate()).padStart(2, '0');
+  
+  if (dateStr === todayStr) {
+    return 'اليوم';
+  } else if (dateStr === yesterdayStr) {
+    return 'أمس';
+  } else {
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const months = [
+          'كانون الثاني (يناير)', 'شباط (فبراير)', 'آذار (مارس)', 'نيسان (أبريل)',
+          'أيار (مايو)', 'حزيران (يونيو)', 'تموز (يوليو)', 'آب (أغسطس)',
+          'أيلول (سبتمبر)', 'تشرين الأول (أكتوبر)', 'تشرين الثاني (نوفمبر)', 'كانون الأول (ديسمبر)'
+        ];
+        return `${d.getDate()} ${months[d.getMonth()]}`;
+      }
+    } catch(e) {
+      console.error(e);
+    }
+    return dateStr;
+  }
+};
+
 const renderSalesHistory = () => {
   salesHistoryList.innerHTML = '';
   
@@ -912,7 +961,19 @@ const renderSalesHistory = () => {
   // Sort chronologically descending (newest first)
   const sorted = [...salesHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
 
+  let lastDateLabel = '';
+
   sorted.forEach(sale => {
+    const dateLabel = getDateLabel(sale.date);
+    if (dateLabel !== lastDateLabel) {
+      lastDateLabel = dateLabel;
+      
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'sticky top-0 z-20 bg-gray-50 dark:bg-[#222222] py-2 px-3.5 text-[10px] font-black text-gray-500 dark:text-gray-400 border-b border-gray-250 dark:border-gray-150 select-none shadow-sm rounded-xl mt-4';
+      headerDiv.innerHTML = `<i class="fa-solid fa-calendar-day ml-1.5 text-[#1e5631] dark:text-yellow-300"></i> ${dateLabel}`;
+      salesHistoryList.appendChild(headerDiv);
+    }
+
     const row = document.createElement('div');
     row.className = 'bg-[#f4f6f5] p-3.5 rounded-xl border border-gray-100 flex justify-between items-center select-none cursor-pointer hover:border-gray-200 transition-all active:scale-[0.98]';
     
@@ -1209,7 +1270,7 @@ const closeCustomerProfileModal = () => {
 
 // --- RENDER COMPONENT: CUSTOMER DIRECTORY ---
 const renderCustomersList = () => {
-  if (isLoading) {
+  if (isLoading && customers.length === 0) {
     customersList.innerHTML = `
       <div class="text-center py-12">
         <i class="fa-solid fa-spinner fa-spin text-2xl text-[#1e5631] mb-2 block"></i>
@@ -1218,7 +1279,7 @@ const renderCustomersList = () => {
     `;
     return;
   }
-  if (hasError) {
+  if (hasError && customers.length === 0) {
     customersList.innerHTML = `
       <div class="text-center py-12">
         <i class="fa-solid fa-circle-exclamation text-2xl text-red-500 mb-2 block"></i>
@@ -1248,7 +1309,7 @@ const renderCustomersList = () => {
 
   filtered.forEach(c => {
     const card = document.createElement('div');
-    card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex justify-between items-center cursor-pointer hover:border-gray-200 transition-all select-none active:scale-[0.98]';
+    card.className = 'bg-white rounded-2xl border border-gray-100 clean-shadow flex flex-col transition-all overflow-hidden select-none';
     
     // Status text color for debt
     const debtClass = c.debt > 0 ? 'text-red-500 font-extrabold' : 'text-emerald-500 font-bold';
@@ -1262,39 +1323,84 @@ const renderCustomersList = () => {
       : 'تسجيل موقع المحل الجغرافي (غير مسجل)';
 
     card.innerHTML = `
-      <div class="space-y-1.5 flex-1 pr-1">
-        <h4 class="text-xs font-extrabold text-gray-900">${c.name}</h4>
-        <div class="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-400 font-bold">
-          <span class="flex items-center gap-1"><i class="fa-solid fa-location-dot text-gray-300"></i> ${c.address}</span>
-          <span class="flex items-center gap-1"><i class="fa-solid fa-phone text-gray-300"></i> ${c.phone}</span>
+      <!-- Collapsed Main Row -->
+      <div class="card-header p-4.5 flex justify-between items-center cursor-pointer hover:bg-gray-50/50 transition-colors select-none">
+        <div class="flex-grow min-w-0 pr-1 text-right">
+          <h4 class="text-xs font-black text-gray-900">${c.name}</h4>
+          <div class="text-[10px] text-gray-400 font-bold mt-1">
+            <span>الرصيد: </span>
+            <span class="${debtClass}">${c.debt.toLocaleString()} د.ع</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button class="btn-make-payment px-4 py-2.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-[10px] font-black rounded-xl cursor-pointer transition-all shadow-sm active:scale-95">
+            تسديد دفعة
+          </button>
+          <span class="text-gray-400 text-xs transition-transform duration-200 accordion-arrow">
+            <i class="fa-solid fa-chevron-down"></i>
+          </span>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        <div class="text-left select-none">
-          <span class="text-[9px] text-gray-400 block font-bold">الدين المستحق</span>
-          <span class="text-xs block ${debtClass}">${c.debt.toLocaleString()} د.ع</span>
+
+      <!-- Expandable Accordion Content Area -->
+      <div class="accordion-content hidden border-t border-gray-50 bg-[#f8f9fa] dark:bg-[#1a1a1a] p-4.5 space-y-3">
+        <!-- Details with subtle location pin -->
+        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-600 dark:text-gray-400 font-bold">
+          <div class="flex items-center gap-1.5 truncate text-right">
+            <i class="fa-solid fa-map-location-dot text-gray-450 text-xs"></i>
+            <span class="truncate">${c.address || 'لا يوجد عنوان'}</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-right">
+            <i class="fa-solid fa-phone text-gray-450 text-xs"></i>
+            <span>${c.phone || 'لا يوجد هاتف'}</span>
+          </div>
         </div>
-        <!-- GPS Relocate -->
-        <button class="btn-gps-relocate w-8 h-8 rounded-lg ${gpsBtnClass} flex items-center justify-center cursor-pointer transition-colors" title="${gpsBtnTitle}">
-          📍
-        </button>
-        <!-- Edit Customer -->
-        <button class="btn-edit-customer w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center cursor-pointer transition-colors" title="تعديل بيانات العميل">
-          <i class="fa-solid fa-pen text-[10px]"></i>
-        </button>
-        <!-- Record Return -->
-        <button class="btn-return-customer w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors" title="تسجيل مرتجع للعميل">
-          <i class="fa-solid fa-rotate-left text-[10px]"></i>
-        </button>
-        <!-- WhatsApp Trigger -->
-        <button class="btn-whatsapp w-8 h-8 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 flex items-center justify-center cursor-pointer transition-colors" title="مراسلة عبر واتساب">
-          <i class="fa-brands fa-whatsapp text-base"></i>
-        </button>
+        <!-- Actions row -->
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button class="btn-ledger flex-1 min-w-[75px] py-2.5 bg-white dark:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 text-gray-700 dark:text-gray-300 text-[9px] font-black rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#333333] flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm">
+            <i class="fa-solid fa-receipt text-gray-500 dark:text-gray-400"></i> كشف الحساب
+          </button>
+          <button class="btn-whatsapp py-2.5 px-3 bg-[#25D366]/10 text-[#25D366] text-[9px] font-black rounded-lg cursor-pointer hover:bg-[#25D366]/20 flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm">
+            <i class="fa-brands fa-whatsapp text-xs"></i> واتساب
+          </button>
+          <button class="btn-edit-customer py-2.5 px-3 bg-gray-100 dark:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 text-[9px] font-black rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-[#333333] flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm">
+            <i class="fa-solid fa-pen text-[8px]"></i> تعديل
+          </button>
+          <button class="btn-return-customer py-2.5 px-3 bg-red-50 dark:bg-red-950/20 text-red-500 text-[9px] font-black rounded-lg cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/40 flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm">
+            <i class="fa-solid fa-rotate-left text-[8px]"></i> مرتجع
+          </button>
+          <button class="btn-gps-relocate py-2.5 px-3 ${gpsBtnClass} text-[9px] font-black rounded-lg cursor-pointer flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm" title="${gpsBtnTitle}">
+            <i class="fa-solid fa-map-pin text-[8px]"></i> موقع
+          </button>
+        </div>
       </div>
     `;
 
-    // Click handler for profile/ledger modal
-    card.addEventListener('click', () => {
+    const cardHeader = card.querySelector('.card-header');
+    const accordionContent = card.querySelector('.accordion-content');
+    const arrow = card.querySelector('.accordion-arrow');
+
+    cardHeader.addEventListener('click', () => {
+      const isHidden = accordionContent.classList.toggle('hidden');
+      if (arrow) {
+        arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+      }
+    });
+
+    // Make Payment directly
+    card.querySelector('.btn-make-payment').addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCustomerProfileModal(c.id);
+      // Auto-open pay debt form container
+      if (payDebtFormContainer) {
+        payDebtFormContainer.classList.remove('hidden');
+        payDebtAmount.value = '';
+      }
+    });
+
+    // Ledger (Account Statement) click handler
+    card.querySelector('.btn-ledger').addEventListener('click', (e) => {
+      e.stopPropagation();
       openCustomerProfileModal(c.id);
     });
 
@@ -1355,7 +1461,7 @@ const renderInventoryList = () => {
   const countEl = document.getElementById('total-inventory-count');
   if (countEl) countEl.innerText = "إجمالي الكراتين في المخزن: " + totalQty;
 
-  if (isLoading) {
+  if (isLoading && products.length === 0) {
     inventoryList.innerHTML = `
       <div class="text-center py-12">
         <i class="fa-solid fa-spinner fa-spin text-2xl text-[#1e5631] mb-2 block"></i>
@@ -1364,7 +1470,7 @@ const renderInventoryList = () => {
     `;
     return;
   }
-  if (hasError) {
+  if (hasError && products.length === 0) {
     inventoryList.innerHTML = `
       <div class="text-center py-12">
         <i class="fa-solid fa-circle-exclamation text-2xl text-red-500 mb-2 block"></i>
@@ -1588,7 +1694,6 @@ const openProductModal = () => {
     addProductModal.classList.remove('opacity-0');
     addProductContent.classList.remove('translate-y-full');
   }, 20);
-  document.getElementById('p-name').focus();
 };
 
 const closeProductModal = () => {
@@ -2170,7 +2275,6 @@ const openCustomerModal = () => {
     addCustomerModal.classList.remove('opacity-0');
     addCustomerContent.classList.remove('translate-y-full');
   }, 20);
-  document.getElementById('c-name').focus();
 };
 
 const closeCustomerModal = () => {
@@ -2218,6 +2322,7 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
   
   // Clear inputs
   checkoutDiscount.value = '';
+  if (checkoutSavings) checkoutSavings.value = '';
   checkoutReceivedInput.value = '';
   
   // Dynamic debt badge init to Deferred (آجل)
@@ -2258,7 +2363,6 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     checkoutModal.classList.remove('modal-hidden');
     checkoutModal.classList.add('modal-visible');
   }, 20);
-  checkoutReceivedInput.focus();
 };
 
 const closeCheckoutModal = () => {
@@ -2318,6 +2422,9 @@ const triggerCheckoutPricingRefresh = () => {
 // Header Kebab Menu Dropdown
 headerMenuBtn.addEventListener('click', toggleHeaderMenuDropdown);
 menuSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
+if (headerSalesHistoryBtn) {
+  headerSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
+}
 
 // Close dropdown when clicking outside
 document.addEventListener('click', () => {
@@ -2383,7 +2490,6 @@ if (paySupplierToggleBtn) {
       paySupplierFormContainer.classList.toggle('hidden');
       if (!paySupplierFormContainer.classList.contains('hidden')) {
         paySupplierAmount.value = '';
-        paySupplierAmount.focus();
       }
     }
   });
@@ -2454,7 +2560,6 @@ if (profilePayDebtBtn) {
       payDebtFormContainer.classList.toggle('hidden');
       if (!payDebtFormContainer.classList.contains('hidden')) {
         payDebtAmount.value = '';
-        payDebtAmount.focus();
       }
     }
   });
@@ -2977,9 +3082,11 @@ checkoutConfirmBtn.addEventListener('click', async () => {
 
     // 2. Safely read inputs
     const discountInput = document.getElementById('checkout-discount');
+    const savingsInput = document.getElementById('checkout-savings');
     const receivedInput = document.getElementById('checkout-received-input');
 
     const discount = discountInput ? (parseFloat(discountInput.value) || 0) : 0;
+    const savings = savingsInput ? (parseFloat(savingsInput.value) || 0) : 0;
     const received = receivedInput ? (parseFloat(receivedInput.value) || 0) : 0;
     const finalVal = Math.max(0, subtotal - discount);
 
@@ -3115,6 +3222,7 @@ checkoutConfirmBtn.addEventListener('click', async () => {
       totalAmount: finalVal,
       subtotal: subtotal,
       discount: discount,
+      savings: savings,
       receivedAmount: received,
       status: statusText,
       items: cartArray
@@ -3130,6 +3238,7 @@ checkoutConfirmBtn.addEventListener('click', async () => {
       totalAmount: subtotal,
       receivedAmount: received,
       discount: discount,
+      savings: savings,
       status: statusText,
       items: cartArray,
       sellerName: activeUser ? activeUser['اسم المستخدم'] : 'بائع عام'
@@ -3268,7 +3377,6 @@ const toggleQuickCustomerMode = (forceState = null) => {
       checkoutQuickCustomerBtn.classList.add('bg-[#1e5631]', 'text-white', 'border-[#1e5631]');
       checkoutQuickCustomerBtn.classList.remove('bg-gray-100', 'text-gray-700', 'border-gray-250');
     }
-    if (checkoutQuickCustomerName) checkoutQuickCustomerName.focus();
   } else {
     if (checkoutCustomerSelectWrapper) checkoutCustomerSelectWrapper.classList.remove('hidden');
     if (checkoutQuickCustomerWrapper) checkoutQuickCustomerWrapper.classList.add('hidden');
@@ -3289,7 +3397,6 @@ const openSmartAiModal = () => {
   if (smartAiModal) {
     smartAiModal.classList.remove('hidden');
   }
-  aiTextInput.focus();
 };
 
 const closeSmartAiModal = () => {
@@ -3624,6 +3731,15 @@ if (smartAiClose) smartAiClose.addEventListener('click', closeSmartAiModal);
 if (aiMicBtn) aiMicBtn.addEventListener('click', toggleRecording);
 if (aiExecuteBtn) aiExecuteBtn.addEventListener('click', executeAiCommand);
 
+if (headerDarkModeBtn) {
+  headerDarkModeBtn.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    updateThemeIcon();
+    showArabicToast(isDark ? 'تم تفعيل الوضع الليلي' : 'تم تفعيل الوضع المضيء', 'success');
+  });
+}
+
 // --- CUSTOM CUSTOMER DROPDOWN BINDINGS & SELECTORS ---
 const customCustomerDropdownTrigger = document.getElementById('custom-customer-dropdown-trigger');
 const customCustomerDropdownLabel = document.getElementById('custom-customer-dropdown-label');
@@ -3640,7 +3756,6 @@ if (customCustomerDropdownTrigger) {
       customCustomerDropdownMenu.classList.remove('hidden');
       customCustomerDropdownSearch.value = '';
       renderCustomCustomerDropdownItems();
-      customCustomerDropdownSearch.focus();
     } else {
       customCustomerDropdownMenu.classList.add('hidden');
     }
@@ -3828,8 +3943,57 @@ const stopCameraScanner = () => {
   }
 };
 
+const playBeep = () => {
+  if (navigator.vibrate) {
+    try {
+      navigator.vibrate(100);
+    } catch (e) {
+      console.warn("Haptic feedback failed:", e);
+    }
+  }
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      const audioCtx = new AudioContext();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); // 800Hz beep tone
+      
+      gainNode.gain.setValueAtTime(0.0, audioCtx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+      
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + 0.15);
+    }
+  } catch (e) {
+    console.warn("Web Audio API beep failed:", e);
+  }
+};
+
+const updateThemeIcon = () => {
+  if (!headerDarkModeBtn) return;
+  const isDark = document.documentElement.classList.contains('dark');
+  const icon = headerDarkModeBtn.querySelector('i');
+  if (icon) {
+    if (isDark) {
+      icon.className = 'fa-solid fa-sun text-lg text-yellow-300';
+    } else {
+      icon.className = 'fa-solid fa-moon text-lg';
+    }
+  }
+};
+
 const onCameraScanSuccess = (decodedText, decodedResult) => {
   console.log(`Barcode scanned successfully: ${decodedText}`, decodedResult);
+  
+  // Play synthetic beep and haptic feedback
+  playBeep();
   
   // Immediately stop the scanner
   stopCameraScanner();
@@ -3907,7 +4071,8 @@ const handleLogin = () => {
   const user = users.find(u => u['اسم المستخدم'] === username && String(u['كلمة المرور']) === password);
   if (user) {
     activeUser = user;
-    sessionStorage.setItem('activeUser', JSON.stringify(user));
+    localStorage.setItem('activeUser', JSON.stringify(user));
+    document.documentElement.classList.add('user-logged-in');
 
     loginContainer.style.display = 'none';
     appContainer.style.display = 'flex';
@@ -3917,6 +4082,8 @@ const handleLogin = () => {
     loginPasswordInput.value = '';
 
     showArabicToast(`أهلاً بك، ${activeUser['اسم المستخدم']}`, 'success');
+
+    applyRBACRules(); // Apply RBAC rules on successful login
 
     renderInventoryList();
     renderCustomersList();
@@ -3939,27 +4106,46 @@ if (loginPasswordInput) {
   });
 }
 
+// Bind Logout buttons
+const performLogout = () => {
+  localStorage.removeItem('activeUser');
+  document.documentElement.classList.remove('user-logged-in');
+  activeUser = null;
+  appContainer.style.display = 'none';
+  loginContainer.style.display = 'flex';
+  closeHeaderMenuDropdown();
+  showArabicToast('تم تسجيل الخروج بنجاح', 'success');
+};
+
+const menuLogoutBtn = document.getElementById('menu-logout-btn');
+if (menuLogoutBtn) {
+  menuLogoutBtn.addEventListener('click', performLogout);
+}
+
+const headerLogoutBtn = document.getElementById('header-logout-btn');
+if (headerLogoutBtn) {
+  headerLogoutBtn.addEventListener('click', performLogout);
+}
+
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
-  // 1. Instantly load states from local cache (0ms delay UI)
-  loadStatesFromLocalStorage();
-  
-  // 2. Render initial view grids immediately
-  renderInventoryList();
-  renderCustomersList();
-  renderSalesGrid();
+  // Sync the dark mode toggle icon state on start
+  updateThemeIcon();
 
-  // Check active user session
-  const storedUser = sessionStorage.getItem('activeUser');
+  // Check active user session first
+  const storedUser = localStorage.getItem('activeUser');
   if (storedUser) {
     try {
       activeUser = JSON.parse(storedUser);
+      document.documentElement.classList.add('user-logged-in');
       loginContainer.style.display = 'none';
       appContainer.style.display = 'flex';
       headerUserName.textContent = activeUser['اسم المستخدم'];
+      applyRBACRules(); // Apply RBAC rules immediately on restore
     } catch (e) {
       console.error("Failed to parse stored session user:", e);
-      sessionStorage.removeItem('activeUser');
+      localStorage.removeItem('activeUser');
+      document.documentElement.classList.remove('user-logged-in');
       loginContainer.style.display = 'flex';
       appContainer.style.display = 'none';
     }
@@ -3967,6 +4153,14 @@ const initApp = () => {
     loginContainer.style.display = 'flex';
     appContainer.style.display = 'none';
   }
+
+  // 1. Instantly load states from local cache (0ms delay UI)
+  loadStatesFromLocalStorage();
+  
+  // 2. Render initial view grids immediately
+  renderInventoryList();
+  renderCustomersList();
+  renderSalesGrid();
 
   // Start on Sales View
   switchView('sales');
