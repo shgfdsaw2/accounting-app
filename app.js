@@ -649,6 +649,9 @@ const loadInitialData = (isSilent = false, username = '', password = '') => {
       return res.json();
     })
     .then(data => {
+      if (data && data.status === 'error') {
+        throw new Error(data.message || 'خطأ في اسم المستخدم أو كلمة المرور');
+      }
       // Safe mapping for products
       if (data.products && Array.isArray(data.products)) {
         inventory = data.products.map((item, idx) => ({
@@ -2474,7 +2477,9 @@ const triggerCheckoutPricingRefresh = () => {
 
 // Header Kebab Menu Dropdown
 headerMenuBtn.addEventListener('click', toggleHeaderMenuDropdown);
-menuSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
+if (menuSalesHistoryBtn) {
+  menuSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
+}
 if (headerSalesHistoryBtn) {
   headerSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
 }
@@ -3479,13 +3484,14 @@ let isRetryingSpeech = false;
 let hasRetriedOnNetworkError = false;
 
 const initSpeechRecognition = () => {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn("Web Speech API is not supported in this browser.");
-    return;
-  }
+  try {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("Web Speech API is not supported in this browser.");
+      return;
+    }
 
-  recognition = new SpeechRecognition();
+    recognition = new SpeechRecognition();
   recognition.continuous = true;
   recognition.interimResults = true;
   recognition.maxAlternatives = 3;
@@ -3594,6 +3600,10 @@ const initSpeechRecognition = () => {
       stopRecording();
     }
   };
+} catch (error) {
+  console.error("Speech recognition initialization failed:", error);
+  showArabicToast("فشل تهيئة التعرف على الصوت", "error");
+}
 };
 
 const startRecording = async () => {
@@ -4274,6 +4284,26 @@ if (headerLogoutBtn) {
 
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
+  // Check active user session first
+  const storedUser = localStorage.getItem('activeUser');
+  if (storedUser) {
+    try {
+      activeUser = JSON.parse(storedUser);
+      document.documentElement.classList.add('user-logged-in');
+      if (loginContainer) loginContainer.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'flex';
+      if (headerUserName) headerUserName.textContent = activeUser['اسم المستخدم'];
+    } catch (e) {
+      console.error("Failed to parse stored session user:", e);
+      localStorage.removeItem('activeUser');
+      document.documentElement.classList.remove('user-logged-in');
+      if (loginContainer) loginContainer.style.display = 'flex';
+      if (appContainer) appContainer.style.display = 'none';
+    }
+  } else {
+    if (loginContainer) loginContainer.style.display = 'flex';
+    if (appContainer) appContainer.style.display = 'none';
+  }
   // Sync the dark mode toggle icon state on start
   updateThemeIcon();
 
@@ -4289,26 +4319,8 @@ const initApp = () => {
   switchView('sales');
   updateCartBadge();
 
-  // Check active user session first
-  const storedUser = localStorage.getItem('activeUser');
-  if (storedUser) {
-    try {
-      activeUser = JSON.parse(storedUser);
-      document.documentElement.classList.add('user-logged-in');
-      loginContainer.style.display = 'none';
-      appContainer.style.display = 'flex';
-      headerUserName.textContent = activeUser['اسم المستخدم'];
-      applyRBACRules(); // Apply RBAC rules immediately on restore
-    } catch (e) {
-      console.error("Failed to parse stored session user:", e);
-      localStorage.removeItem('activeUser');
-      document.documentElement.classList.remove('user-logged-in');
-      loginContainer.style.display = 'flex';
-      appContainer.style.display = 'none';
-    }
-  } else {
-    loginContainer.style.display = 'flex';
-    appContainer.style.display = 'none';
+  if (activeUser) {
+    applyRBACRules(); // Apply RBAC rules immediately on restore
   }
 
   // 3. Fetch latest data in the background silently
