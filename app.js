@@ -600,7 +600,10 @@ const showArabicToast = (message, type = 'success') => {
 
 // --- FETCH INITIAL DATA (GET) ---
 const loadInitialData = (isSilent = false) => {
-  if (!isSilent) {
+  const hasCachedData = inventory.length > 0 || customers.length > 0;
+  const runSilently = isSilent || hasCachedData;
+
+  if (!runSilently) {
     isLoading = true;
     hasError = false;
     renderSalesGrid();
@@ -767,13 +770,14 @@ const loadInitialData = (isSilent = false) => {
       isLoading = false;
       
       // Genuinely silent background sync failures: only set hasError and show toast if not silent
-      if (!isSilent) {
+      if (!runSilently) {
         hasError = true;
         renderSalesGrid();
         renderCustomersList();
         renderInventoryList();
         showArabicToast('فشل تحميل البيانات من السيرفر!', 'error');
       }
+      throw err;
     });
 };
 
@@ -3341,7 +3345,7 @@ if (mainContainer && pullIndicator) {
       pullIndicator.style.height = '48px';
       pullIndicator.style.opacity = '1';
 
-      loadInitialData(true).finally(() => {
+      loadInitialData(true).catch(() => {}).finally(() => {
         pullIndicator.style.height = '0px';
         pullIndicator.style.opacity = '0';
       });
@@ -3357,7 +3361,7 @@ if (mainContainer && pullIndicator) {
 
 // Auto-Sync Background Task (Every 1 minute)
 setInterval(() => {
-  loadInitialData(true);
+  loadInitialData(true).catch(() => {});
 }, 60000);
 
 // --- QUICK CUSTOMER ADDITION FLOW ---
@@ -4059,13 +4063,28 @@ const applyRBACRules = () => {
 };
 
 // --- AUTHENTICATION & LOGIN HANDLERS ---
-const handleLogin = () => {
+const handleLogin = async () => {
   const username = loginUsernameInput.value.trim();
   const password = loginPasswordInput.value.trim();
 
   if (!username || !password) {
     showArabicToast('الرجاء إدخال اسم المستخدم وكلمة المرور', 'error');
     return;
+  }
+
+  // Set button loading state
+  if (loginSubmitBtn) {
+    loginSubmitBtn.disabled = true;
+    loginSubmitBtn.textContent = 'جاري التحقق...';
+  }
+
+  let fetchError = null;
+  try {
+    // Restore fetch request to verify credentials against backend
+    await loadInitialData(true);
+  } catch (err) {
+    console.warn("Failed to fetch fresh users from backend, falling back to local cache:", err);
+    fetchError = err;
   }
 
   const user = users.find(u => u['اسم المستخدم'] === username && String(u['كلمة المرور']) === password);
@@ -4088,8 +4107,21 @@ const handleLogin = () => {
     renderInventoryList();
     renderCustomersList();
     renderSalesGrid();
+
+    // Silently fetch latest data in background to refresh views (SWR)
+    loadInitialData(true).catch(() => {});
   } else {
-    showArabicToast('خطأ في اسم المستخدم أو كلمة المرور!', 'error');
+    if (fetchError && users.length === 0) {
+      showArabicToast('تعذر الاتصال بالسيرفر للتحقق من الحساب (لا توجد بيانات محلية)!', 'error');
+    } else {
+      showArabicToast('خطأ في اسم المستخدم أو كلمة المرور!', 'error');
+    }
+  }
+
+  // Restore button state
+  if (loginSubmitBtn) {
+    loginSubmitBtn.disabled = false;
+    loginSubmitBtn.textContent = 'دخول';
   }
 };
 
@@ -4132,6 +4164,18 @@ const initApp = () => {
   // Sync the dark mode toggle icon state on start
   updateThemeIcon();
 
+  // 1. Instantly load states from local cache (0ms delay UI)
+  loadStatesFromLocalStorage();
+  
+  // 2. Render initial view grids immediately
+  renderInventoryList();
+  renderCustomersList();
+  renderSalesGrid();
+
+  // Start on Sales View
+  switchView('sales');
+  updateCartBadge();
+
   // Check active user session first
   const storedUser = localStorage.getItem('activeUser');
   if (storedUser) {
@@ -4154,20 +4198,8 @@ const initApp = () => {
     appContainer.style.display = 'none';
   }
 
-  // 1. Instantly load states from local cache (0ms delay UI)
-  loadStatesFromLocalStorage();
-  
-  // 2. Render initial view grids immediately
-  renderInventoryList();
-  renderCustomersList();
-  renderSalesGrid();
-
-  // Start on Sales View
-  switchView('sales');
-  updateCartBadge();
-
   // 3. Fetch latest data in the background silently
-  loadInitialData(true);
+  loadInitialData(true).catch(() => {});
   
   // 4. Trigger sync for any pending offline items
   processSyncQueue();
