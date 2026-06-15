@@ -3761,6 +3761,113 @@ let isRecording = false;
 let isRetryingSpeech = false;
 let hasRetriedOnNetworkError = false;
 
+const processSmartVoice = async (transcript) => {
+  showArabicToast('جاري تحليل الصوت بذكاء...', 'info');
+  try {
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({ action: 'smart_voice', text: transcript }),
+      redirect: 'follow'
+    });
+    
+    const result = await response.json();
+    console.log("Smart voice response result:", result);
+    
+    if (result.status === "error") {
+      showArabicToast("خطأ من السيرفر: " + result.message, "error");
+      return;
+    }
+
+    const data = result.aiData || result;
+
+    // Set Customer
+    const customerName = data.customer || data.customerName;
+    if (customerName) {
+      const match = customers.find(c => 
+        c.name.toLowerCase().includes(customerName.toLowerCase()) ||
+        customerName.toLowerCase().includes(c.name.toLowerCase())
+      );
+      if (match) {
+        toggleQuickCustomerMode(false);
+        checkoutCustomerSelect.value = match.id;
+        if (customCustomerDropdownLabel) {
+          customCustomerDropdownLabel.textContent = `${match.name} (${match.address})`;
+        }
+      } else {
+        toggleQuickCustomerMode(true);
+        if (checkoutQuickCustomerName) {
+          checkoutQuickCustomerName.value = customerName;
+        }
+        showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerName}"`, "info");
+      }
+    }
+
+    // Add Items
+    const items = data.items;
+    if (items && Array.isArray(items) && items.length > 0) {
+      // Revert local inventory for existing cart
+      cart.forEach(item => {
+        const prod = inventory.find(p => p.id === item.productId);
+        if (prod) {
+          prod.qty += item.qty;
+          prod.quantity += item.qty;
+        }
+      });
+      cart = [];
+
+      items.forEach(aiItem => {
+        const prod = inventory.find(p => 
+          p.name.toLowerCase().includes(aiItem.name.toLowerCase()) ||
+          aiItem.name.toLowerCase().includes(p.name.toLowerCase())
+        );
+        if (prod) {
+          const qtyToAdd = parseInt(aiItem.qty) || 1;
+          const actualQty = Math.min(prod.quantity, qtyToAdd);
+          if (actualQty > 0) {
+            prod.qty -= actualQty;
+            prod.quantity -= actualQty;
+            cart.push({
+              productId: prod.id,
+              qty: actualQty
+            });
+            if (actualQty < qtyToAdd) {
+              showArabicToast(`تمت إضافة ${actualQty} فقط من "${prod.name}" لنفاد المخزون`, "info");
+            }
+          } else {
+            showArabicToast(`المنتج "${prod.name}" نفد من المخزن!`, "error");
+          }
+        } else {
+          showArabicToast(`لم يتم العثور على منتج باسم "${aiItem.name}"`, "error");
+        }
+      });
+
+      updateCartBadge();
+      renderSalesGrid();
+      renderCartRows();
+    }
+
+    // Open Checkout Modal
+    let sum = 0;
+    cart.forEach(item => {
+      const prod = inventory.find(p => p.id === item.productId);
+      if (prod) sum += prod.price * item.qty;
+    });
+    if (checkoutSubtotalVal) checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
+    if (checkoutFinalVal) checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
+    triggerCheckoutPricingRefresh();
+
+    openCheckoutModal(true);
+    showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
+
+  } catch (err) {
+    console.error("Smart voice processing error:", err);
+    showArabicToast("فشل الاتصال بالذكاء الاصطناعي: " + err.message, "error");
+  }
+};
+
 const initSpeechRecognition = () => {
   try {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3770,48 +3877,44 @@ const initSpeechRecognition = () => {
     }
 
     recognition = new SpeechRecognition();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.maxAlternatives = 3;
-  
-  // Force Arabic (Iraqi) language directly
-  recognition.lang = 'ar-IQ';
-
-  recognition.onstart = () => {
-    isRecording = true;
-    if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
-    if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
-    if (aiMicBtn) {
-      aiMicBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200', 'recording');
-    }
-    if (salesMicBtn) {
-      salesMicBtn.classList.add('recording');
-    }
-  };
-
-  recognition.onresult = (event) => {
-    let transcript = '';
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      if (event.results[i].isFinal) {
-        transcript += event.results[i][0].transcript;
-      }
-    }
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
     
-    transcript = transcript.trim();
-    if (!transcript) return;
+    // Force Arabic (Iraqi) language directly
+    recognition.lang = 'ar-IQ';
 
-    console.log('Recognized Speech:', transcript);
+    recognition.onstart = () => {
+      isRecording = true;
+      if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
+      if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
+      if (aiMicBtn) {
+        aiMicBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200', 'recording');
+      }
+      if (salesMicBtn) {
+        salesMicBtn.classList.add('recording');
+      }
+    };
 
-    const activeInput = getActiveSearchInput();
-    if (activeInput) {
-      activeInput.value = transcript;
-      // Dispatch the input event immediately so search filtering works
-      activeInput.dispatchEvent(new Event('input'));
-    }
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          transcript += event.results[i][0].transcript;
+        }
+      }
+      
+      transcript = transcript.trim();
+      if (!transcript) return;
 
-    // Stop recognition to reset UI state after successful parsing
-    stopRecording();
-  };
+      console.log('Recognized Speech:', transcript);
+
+      // Stop recognition to reset UI state after successful parsing
+      stopRecording();
+
+      // Call Gemini smart voice parser
+      processSmartVoice(transcript);
+    };
 
   recognition.onerror = (event) => {
     console.error("Speech recognition error event details:", event.error, event);
@@ -3937,7 +4040,7 @@ const stopRecording = () => {
 
 const toggleRecording = async () => {
   if (!navigator.onLine) {
-    showArabicToast('المايكروفون يحتاج إلى اتصال بالإنترنت', 'error');
+    showArabicToast('المساعد الذكي يحتاج إلى إنترنت', 'error');
     return;
   }
   if (isRecording) {
