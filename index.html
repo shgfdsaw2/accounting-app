@@ -166,12 +166,12 @@
         <!-- Search and Scan Bar -->
         <div class="flex gap-2">
           <div class="flex-1 relative">
-            <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400 text-xs">
+            <span class="absolute inset-y-0 left-3 flex items-center pointer-events-none text-gray-400 text-xs">
               <i class="fa-solid fa-magnifying-glass"></i>
             </span>
-            <input type="text" id="sales-search-bar" placeholder="البحث عن منتج..." class="w-full bg-white text-gray-800 text-xs pl-10 pr-8.5 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
-            <!-- Mic Icon Button embedded on the far left -->
-            <button id="sales-mic-btn" type="button" class="absolute inset-y-0 left-0 flex items-center px-3 text-gray-450 hover:text-[#1e5631] transition-colors cursor-pointer" title="تحدث بصوتك">
+            <input type="text" id="sales-search-bar" placeholder="البحث عن منتج..." class="w-full bg-white text-gray-800 text-xs pl-8.5 pr-10 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
+            <!-- Mic Icon Button embedded on the far right -->
+            <button id="sales-mic-btn" type="button" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-450 hover:text-[#1e5631] transition-colors cursor-pointer" title="تحدث بصوتك">
               <i class="fa-solid fa-microphone text-xs"></i>
             </button>
           </div>
@@ -490,6 +490,38 @@
 
     <!-- Toast Notifications -->
     <div id="pos-toast-container" class="absolute top-16 left-6 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Unified Floating Action Button (FAB) -->
+    <div id="unified-fab-container" class="absolute bottom-20 left-6 z-40 flex flex-col items-start gap-3 select-none">
+      <!-- Expanded FAB Options (hidden/collapsed by default) -->
+      <div id="fab-options" class="flex flex-col items-start gap-3 opacity-0 pointer-events-none translate-y-4 transition-all duration-300">
+        <!-- Option 1: إضافة منتج -->
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">إضافة منتج</span>
+          <button id="fab-add-product" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
+            <i class="fa-solid fa-box text-xs"></i>
+          </button>
+        </div>
+        <!-- Option 2: إضافة عميل -->
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">إضافة عميل</span>
+          <button id="fab-add-customer" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
+            <i class="fa-solid fa-user-plus text-xs"></i>
+          </button>
+        </div>
+        <!-- Option 3: تسجيل فاتورة -->
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">تسجيل فاتورة</span>
+          <button id="fab-record-invoice" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
+            <i class="fa-solid fa-file-invoice text-xs"></i>
+          </button>
+        </div>
+      </div>
+      <!-- Main FAB Button -->
+      <button id="main-fab-btn" class="w-12 h-12 rounded-full bg-[#1e5631] text-white flex items-center justify-center shadow-2xl cursor-pointer transition-all duration-300 active:scale-95 hover:bg-[#163e23]">
+        <i class="fa-solid fa-plus text-lg transition-transform duration-300" id="main-fab-icon"></i>
+      </button>
+    </div>
 
     </div>
   </div>
@@ -1287,38 +1319,6 @@
           </div>
         </div>
       </div>
-    </div>
-    
-    <!-- Unified Floating Action Button (FAB) -->
-    <div id="unified-fab-container" class="absolute bottom-20 left-6 z-40 flex flex-col items-start gap-3 select-none">
-      <!-- Expanded FAB Options (hidden/collapsed by default) -->
-      <div id="fab-options" class="flex flex-col items-start gap-3 opacity-0 pointer-events-none translate-y-4 transition-all duration-300">
-        <!-- Option 1: إضافة منتج -->
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">إضافة منتج</span>
-          <button id="fab-add-product" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
-            <i class="fa-solid fa-box text-xs"></i>
-          </button>
-        </div>
-        <!-- Option 2: إضافة عميل -->
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">إضافة عميل</span>
-          <button id="fab-add-customer" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
-            <i class="fa-solid fa-user-plus text-xs"></i>
-          </button>
-        </div>
-        <!-- Option 3: تسجيل فاتورة -->
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-black bg-white dark:bg-[#1e1e1e] border border-gray-200 dark:border-gray-150 px-2.5 py-1.5 rounded-lg shadow-sm">تسجيل فاتورة</span>
-          <button id="fab-record-invoice" class="w-10 h-10 rounded-full bg-white dark:bg-[#1e1e1e] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 flex items-center justify-center shadow-lg cursor-pointer transition-all active:scale-95">
-            <i class="fa-solid fa-file-invoice text-xs"></i>
-          </button>
-        </div>
-      </div>
-      <!-- Main FAB Button -->
-      <button id="main-fab-btn" class="w-12 h-12 rounded-full bg-[#1e5631] text-white flex items-center justify-center shadow-2xl cursor-pointer transition-all duration-300 active:scale-95 hover:bg-[#163e23]">
-        <i class="fa-solid fa-plus text-lg transition-transform duration-300" id="main-fab-icon"></i>
-      </button>
     </div>
   </div>
 

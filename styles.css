@@ -479,7 +479,8 @@ body {
 
 /* Search input mic adjustment */
 #sales-search-bar {
-  padding-left: 2.5rem !important; /* pl-10 to fit embedded mic */
+  padding-right: 2.5rem !important; /* pr-10 to fit embedded mic on the right */
+  padding-left: 2.125rem !important; /* pl-8.5 to fit magnifying glass on the left */
 }
 
 

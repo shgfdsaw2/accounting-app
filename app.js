@@ -1357,19 +1357,9 @@ const renderCustomerLedgerView = (customer) => {
               </div>
               <span class="text-[9px] text-gray-400 dark:text-gray-500 font-bold block">🕒 ${timeStr}</span>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-[10px] font-black ${amountClass} px-3 py-1 rounded-lg">
-                ${changePrefix}${sale.totalAmount.toLocaleString()} د.ع
-              </span>
-              <!-- Print Action -->
-              <button class="btn-print-invoice-action w-7 h-7 rounded-lg bg-white dark:bg-[#2d2d2d] text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-250 flex items-center justify-center border border-gray-200 dark:border-gray-150 cursor-pointer transition-colors" title="🖨️ طباعة">
-                <i class="fa-solid fa-print text-[10px]"></i>
-              </button>
-              <!-- WhatsApp Action -->
-              <button class="btn-whatsapp-invoice-action w-7 h-7 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 flex items-center justify-center cursor-pointer transition-colors" title="💬 واتساب">
-                <i class="fa-brands fa-whatsapp text-sm"></i>
-              </button>
-            </div>
+            <span class="text-[10px] font-black ${amountClass} px-3 py-1 rounded-lg">
+              ${changePrefix}${sale.totalAmount.toLocaleString()} د.ع
+            </span>
           `;
           row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-250 flex justify-between items-center cursor-pointer hover:border-gray-200 dark:hover:border-[#2d2d2d] transition-all active:scale-[0.98] mb-2';
 
@@ -1408,9 +1398,9 @@ const renderCustomerLedgerView = (customer) => {
 
             // Dynamically change background color based on direction
             if (diffX > 0) {
-              // Swiping Right -> LTR (Print: main theme green / brand color)
+              // Swiping Right -> LTR (Print: blue)
               const opacity = Math.min(0.85, diffX / 160);
-              row.style.backgroundColor = 'rgba(30, 86, 49, ' + opacity + ')';
+              row.style.backgroundColor = 'rgba(59, 130, 246, ' + opacity + ')';
               row.style.color = '#ffffff';
             } else {
               // Swiping Left -> RTL (WhatsApp: green)
@@ -1473,23 +1463,6 @@ const renderCustomerLedgerView = (customer) => {
           row.addEventListener('click', () => {
             if (row.dataset.swiped === 'true') return;
             openInvoiceDetailsModal(sale);
-          });
-
-          // Print Button click
-          row.querySelector('.btn-print-invoice-action').addEventListener('click', (e) => {
-            e.stopPropagation();
-            const cust = customers.find(c => c.name === sale.customerName);
-            if (printSection) {
-              printSection.innerHTML = generatePrintReceipt(sale, cust);
-            }
-            window.print();
-          });
-
-          // WhatsApp Button click
-          row.querySelector('.btn-whatsapp-invoice-action').addEventListener('click', (e) => {
-            e.stopPropagation();
-            const cust = customers.find(c => c.name === sale.customerName);
-            sendInvoiceWhatsApp(sale, cust);
           });
         }
 
@@ -3831,13 +3804,9 @@ const initSpeechRecognition = () => {
 
     const activeInput = getActiveSearchInput();
     if (activeInput) {
-      if (activeInput === aiTextInput) {
-        activeInput.value = (activeInput.value + ' ' + transcript).trim();
-      } else {
-        activeInput.value = transcript;
-        // Dispatch the input event immediately so search filtering works
-        activeInput.dispatchEvent(new Event('input'));
-      }
+      activeInput.value = transcript;
+      // Dispatch the input event immediately so search filtering works
+      activeInput.dispatchEvent(new Event('input'));
     }
 
     // Stop recognition to reset UI state after successful parsing
@@ -3967,6 +3936,10 @@ const stopRecording = () => {
 };
 
 const toggleRecording = async () => {
+  if (!navigator.onLine) {
+    showArabicToast('المايكروفون يحتاج إلى اتصال بالإنترنت', 'error');
+    return;
+  }
   if (isRecording) {
     stopRecording();
   } else {
