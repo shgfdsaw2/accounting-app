@@ -284,7 +284,6 @@ const processSyncQueue = async () => {
 
 window.addEventListener('online', processSyncQueue);
 
-
 const getCurrentLocation = () => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
@@ -307,6 +306,60 @@ const getCurrentLocation = () => {
   });
 };
 
+// --- HAVERSINE GEOLOCATION AUTO-SELECT LOGIC ---
+const getHaversineDistanceInMeters = (coords1, coords2) => {
+  const [lat1, lon1] = coords1;
+  const [lat2, lon2] = coords2;
+  const R = 6371000; // Earth's radius in meters
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in meters
+};
+
+const parseGpsCoords = (gpsStr) => {
+  if (!gpsStr) return null;
+  const parts = gpsStr.split(',');
+  if (parts.length !== 2) return null;
+  const lat = parseFloat(parts[0]);
+  const lon = parseFloat(parts[1]);
+  if (isNaN(lat) || isNaN(lon)) return null;
+  return [lat, lon];
+};
+
+const autoSelectNearestCustomer = async () => {
+  try {
+    const userGpsStr = await getCurrentLocation();
+    const userCoords = parseGpsCoords(userGpsStr);
+    if (!userCoords) return;
+
+    let nearestCustomer = null;
+    let minDistance = Infinity;
+
+    customers.forEach(cust => {
+      const custCoords = parseGpsCoords(cust.gps);
+      if (custCoords) {
+        const dist = getHaversineDistanceInMeters(userCoords, custCoords);
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearestCustomer = cust;
+        }
+      }
+    });
+
+    if (nearestCustomer) {
+      selectCustomerInDropdown(nearestCustomer.id);
+      console.log(`Nearest customer: ${nearestCustomer.name} (${minDistance.toFixed(1)} meters away)`);
+      showArabicToast(`تم تحديد العميل الأقرب تلقائياً: ${nearestCustomer.name} (${minDistance.toFixed(0)} متر)`, 'success');
+    }
+  } catch (err) {
+    console.warn("Could not auto-select nearest customer:", err);
+  }
+};
 
 // --- DOM ELEMENTS ---
 const viewSales = document.getElementById('view-sales');
@@ -323,12 +376,6 @@ const menuSalesHistoryBtn = document.getElementById('menu-sales-history-btn');
 const pullIndicator = document.getElementById('pull-to-refresh-indicator');
 
 const headerAddBtn = document.getElementById('header-add-btn');
-const mainFabBtn = document.getElementById('main-fab-btn');
-const mainFabIcon = document.getElementById('main-fab-icon');
-const fabOptions = document.getElementById('fab-options');
-const fabAddProduct = document.getElementById('fab-add-product');
-const fabAddCustomer = document.getElementById('fab-add-customer');
-const fabRecordInvoice = document.getElementById('fab-record-invoice');
 const salesProductsCount = document.getElementById('sales-products-count');
 const salesProductsGrid = document.getElementById('sales-products-grid');
 
@@ -482,7 +529,6 @@ const editPName = document.getElementById('edit-p-name');
 const editPBarcode = document.getElementById('edit-p-barcode');
 const editPSell = document.getElementById('edit-p-sell');
 const editPBuy = document.getElementById('edit-p-buy');
-const editPWholesale = document.getElementById('edit-p-wholesale');
 const editPCategory = document.getElementById('edit-p-category');
 const editPQty = document.getElementById('edit-p-qty');
 
@@ -539,6 +585,7 @@ const headerCameraBtn = document.getElementById('header-camera-btn');
 const cameraScannerModal = document.getElementById('camera-scanner-modal');
 const cameraScannerCloseX = document.getElementById('camera-scanner-close-x');
 const cameraScannerCloseBtn = document.getElementById('camera-scanner-close-btn');
+
 // --- LOGIN & AUTH DOM SELECTORS ---
 const loginContainer = document.getElementById('login-container');
 const appContainer = document.getElementById('app-container');
@@ -560,6 +607,20 @@ const views = {
 const switchView = (targetViewKey) => {
   closeQuickMenu();
   
+  // Close cart drawers and modals on switch
+  closeCartDrawer();
+  closeCheckoutModal();
+
+  // Hide the global page header on screens other than sales page
+  const mainHeader = document.getElementById('main-header');
+  if (mainHeader) {
+    if (targetViewKey === 'sales') {
+      mainHeader.classList.remove('hidden');
+    } else {
+      mainHeader.classList.add('hidden');
+    }
+  }
+  
   Object.keys(views).forEach(key => {
     const { el, tab } = views[key];
     const indicator = tab.querySelector('.nav-indicator');
@@ -575,6 +636,7 @@ const switchView = (targetViewKey) => {
       // Context-aware view rendering on entry
       if (key === 'sales') {
         renderSalesGrid();
+        autoSelectNearestCustomer(); // Automatically auto-select nearest customer
       } else if (key === 'customers') {
         renderCustomersList();
       } else if (key === 'inventory') {
@@ -599,7 +661,7 @@ const showArabicToast = (message, type = 'success') => {
   const colors = {
     success: 'bg-[#e8ecea] text-[#1e5631] border-[#c9d6cf]',
     error: 'bg-red-50 text-red-800 border-red-100',
-    info: 'bg-gray-50 text-gray-800 border-gray-100'
+    info: 'bg-gray-50 text-gray-800 border-gray-105'
   };
   
   const icons = {
@@ -669,7 +731,6 @@ const loadInitialData = (isSilent = false, username = '', password = '') => {
           category: item.category || item['الصنف'] || 'الغذائيات',
           unit: item.category || item['الصنف'] || 'عبوة',
           barcode: String(item.barcode !== undefined ? item.barcode : (item['الباركود'] || '')),
-          // Backwards compatibility keys
           qty: parseInt(item.quantity) !== undefined && !isNaN(parseInt(item.quantity)) ? parseInt(item.quantity) : (parseInt(item['الكميه']) || parseInt(item['الكمية']) || 0),
           sellPrice: parseFloat(item.price) !== undefined && !isNaN(parseFloat(item.price)) ? parseFloat(item.price) : (parseFloat(item['سعر البيع']) || 0),
           costPrice: parseFloat(item.wholesalePrice) !== undefined && !isNaN(parseFloat(item.wholesalePrice)) ? parseFloat(item.wholesalePrice) : (parseFloat(item['سعر الشراء']) || 0)
@@ -805,12 +866,17 @@ const loadInitialData = (isSilent = false, username = '', password = '') => {
       renderSalesGrid();
       renderCustomersList();
       renderInventoryList();
+
+      // Auto-select nearest customer if we are currently on the sales page and have loaded data
+      const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
+      if (activeView === 'sales') {
+        autoSelectNearestCustomer();
+      }
     })
     .catch(err => {
       console.warn("Background fetch sync failed:", err);
       isLoading = false;
       
-      // Genuinely silent background sync failures: only set hasError and show toast if not silent
       if (!runSilently) {
         hasError = true;
         renderSalesGrid();
@@ -861,21 +927,18 @@ const renderSalesGrid = () => {
     return;
   }
 
-  // Alphabetical sorting of filtered items
   filtered.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
   filtered.forEach(prod => {
     const card = document.createElement('div');
     card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex flex-col justify-between space-y-3 select-none';
     
-    // Find quantity in cart
     const cartItem = cart.find(c => c.productId === prod.id);
     const cartQty = cartItem ? cartItem.qty : 0;
 
-    // Low stock warning class
-    let qtyClass = 'text-gray-500';
-    if (prod.quantity === 0) qtyClass = 'text-red-500 font-extrabold';
-    else if (prod.quantity < 5) qtyClass = 'text-amber-500 font-extrabold';
+    let qtyClass = 'text-gray-550';
+    if (prod.quantity === 0) qtyClass = 'text-red-550 font-extrabold';
+    else if (prod.quantity < 5) qtyClass = 'text-amber-550 font-extrabold';
 
     const { cartonPrice, unitPrice } = getProductPrices(prod);
     card.innerHTML = `
@@ -883,7 +946,7 @@ const renderSalesGrid = () => {
         <h4 class="text-xs font-extrabold text-gray-900 line-clamp-2 min-h-[32px]">${prod.name}</h4>
         <div class="mt-2 space-y-1">
           <div class="flex justify-between text-[10px]">
-            <span class="text-gray-400">سعر الكارتون:</span>
+            <span class="text-gray-404">سعر الكارتون:</span>
             <span class="font-extrabold text-[#1e5631]">${cartonPrice.toLocaleString()} د.ع</span>
           </div>
           <div class="flex justify-between text-[10px]">
@@ -897,7 +960,6 @@ const renderSalesGrid = () => {
         </div>
       </div>
       
-      <!-- Inline Cart Controls -->
       <div class="flex items-center justify-between border-t border-gray-50 pt-2.5">
         <button class="btn-dec w-8 h-8 rounded-lg bg-gray-100 text-gray-700 font-black flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors select-none active:scale-90" ${cartQty === 0 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
           <i class="fa-solid fa-minus text-[9px]"></i>
@@ -909,7 +971,6 @@ const renderSalesGrid = () => {
       </div>
     `;
 
-    // Event listeners
     const btnDec = card.querySelector('.btn-dec');
     const btnInc = card.querySelector('.btn-inc');
 
@@ -1004,7 +1065,6 @@ const renderSalesHistory = () => {
     return;
   }
 
-  // Sort chronologically descending (newest first)
   const sorted = [...salesHistory].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   let lastDateLabel = '';
@@ -1026,7 +1086,7 @@ const renderSalesHistory = () => {
     let badgeClass = '';
     if (sale.status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
     else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100';
-    else badgeClass = 'bg-red-50 text-red-700 border-red-100';
+    else badgeClass = 'bg-red-50 text-red-700 border-red-155';
 
     row.innerHTML = `
       <div class="space-y-1">
@@ -1040,23 +1100,19 @@ const renderSalesHistory = () => {
         <span class="text-xs font-black text-[#1e5631] bg-[#e8ecea] px-3 py-1 rounded-lg">
           ${sale.totalAmount.toLocaleString()} د.ع
         </span>
-        <!-- Print Action -->
-        <button class="btn-print-invoice-action w-7 h-7 rounded-lg bg-white text-gray-500 hover:text-gray-800 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors" title="🖨️ طباعة">
+        <button class="btn-print-invoice-action w-7 h-7 rounded-lg bg-white text-gray-505 hover:text-gray-800 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors" title="🖨️ طباعة">
           <i class="fa-solid fa-print text-[10px]"></i>
         </button>
-        <!-- WhatsApp Action -->
         <button class="btn-whatsapp-invoice-action w-7 h-7 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 flex items-center justify-center cursor-pointer transition-colors" title="💬 واتساب">
           <i class="fa-brands fa-whatsapp text-sm"></i>
         </button>
       </div>
     `;
 
-    // Click to view invoice details
     row.addEventListener('click', () => {
       openInvoiceDetailsModal(sale);
     });
 
-    // Print Button click
     row.querySelector('.btn-print-invoice-action').addEventListener('click', (e) => {
       e.stopPropagation();
       const cust = customers.find(c => c.name === sale.customerName);
@@ -1066,7 +1122,6 @@ const renderSalesHistory = () => {
       window.print();
     });
 
-    // WhatsApp Button click
     row.querySelector('.btn-whatsapp-invoice-action').addEventListener('click', (e) => {
       e.stopPropagation();
       const cust = customers.find(c => c.name === sale.customerName);
@@ -1113,7 +1168,6 @@ const openInvoiceDetailsModal = (invoice) => {
   detailInvoiceTotal.textContent = `${total.toLocaleString()} د.ع`;
   detailInvoiceReceived.textContent = `${received.toLocaleString()} د.ع`;
 
-  // Status Badge Class mapping
   detailInvoiceStatus.textContent = status;
   let badgeClass = '';
   if (status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
@@ -1121,12 +1175,10 @@ const openInvoiceDetailsModal = (invoice) => {
   else badgeClass = 'bg-red-50 text-red-700 border-red-100';
   detailInvoiceStatus.className = `px-2.5 py-0.5 rounded-full border text-[9px] font-black ${badgeClass}`;
 
-  // Populate items
   detailInvoiceItems.innerHTML = '';
   if (!invoice.items || invoice.items.length === 0) {
     detailInvoiceItems.innerHTML = '<div class="text-center py-4 text-xs text-gray-400">لا توجد تفاصيل للمواد في هذه الفاتورة.</div>';
   } else {
-    // Header for items grid
     const header = document.createElement('div');
     header.className = 'grid grid-cols-4 gap-2 text-[10px] font-bold text-gray-500 border-b border-gray-100 pb-1.5 mb-1 select-none';
     header.innerHTML = `
@@ -1205,17 +1257,6 @@ const getInvoiceDateObj = (sale) => {
   return new Date();
 };
 
-const formatTime12Hour = (date) => {
-  let hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'م' : 'ص';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  const minutesStr = String(minutes).padStart(2, '0');
-  return `${hours}:	ext-gray-800` + `${minutesStr} ${ampm}`; // wait, simpler:
-};
-
-// We can simplify formatTime12Hour:
 const formatTime12HourStr = (date) => {
   let hours = date.getHours();
   const minutes = date.getMinutes();
@@ -1287,14 +1328,12 @@ const renderCustomerLedgerView = (customer) => {
   if (customerSales.length === 0) {
     profileLedgerList.innerHTML = '<div class="text-center py-6 text-xs text-gray-400">لا توجد فواتير مسجلة لهذا العميل.</div>';
   } else {
-    // Sort newest first based on full date object (including time if parsed)
     customerSales.sort((a, b) => {
       const dateA = getInvoiceDateObj(a);
       const dateB = getInvoiceDateObj(b);
       return dateB - dateA;
     });
 
-    // Group by date (YYYY-MM-DD)
     const groups = {};
     customerSales.forEach(sale => {
       const dateStr = sale.date || getInvoiceDateObj(sale).toISOString().split('T')[0];
@@ -1304,11 +1343,9 @@ const renderCustomerLedgerView = (customer) => {
       groups[dateStr].push(sale);
     });
 
-    // Render each group
     Object.keys(groups).forEach(dateStr => {
-      // Add Date Header
       const headerDiv = document.createElement('div');
-      headerDiv.className = 'sticky top-0 bg-white dark:bg-[#1e1e1e] py-2 px-1 border-b border-gray-100 dark:border-gray-150 text-[10px] font-black text-gray-400 dark:text-gray-500 z-10 select-none';
+      headerDiv.className = 'sticky top-0 bg-white dark:bg-[#1e1e1e] py-2 px-1 border-b border-gray-100 dark:border-gray-150 text-[10px] font-black text-gray-400 dark:text-gray-505 z-10 select-none';
       headerDiv.innerHTML = '<span>' + getArabicDateLabel(dateStr) + '</span>';
       profileLedgerList.appendChild(headerDiv);
 
@@ -1346,7 +1383,7 @@ const renderCustomerLedgerView = (customer) => {
           row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-250 flex justify-between items-center select-none mb-2';
         } else {
           if (sale.status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900';
-          else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900';
+          else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/20 dark:text-amber-404 dark:border-emerald-900';
           else badgeClass = 'bg-red-50 text-red-700 border-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900';
           
           row.innerHTML = `
@@ -1382,7 +1419,6 @@ const renderCustomerLedgerView = (customer) => {
             const diffX = currentX - startX;
             const diffY = currentY - startY;
 
-            // If vertical scroll is dominant, don't swipe horizontally
             if (Math.abs(diffY) > Math.abs(diffX)) {
               return;
             }
@@ -1393,17 +1429,13 @@ const renderCustomerLedgerView = (customer) => {
               if (e.cancelable) e.preventDefault();
             }
 
-            // Translate row
             row.style.transform = 'translateX(' + diffX + 'px)';
 
-            // Dynamically change background color based on direction
             if (diffX > 0) {
-              // Swiping Right -> LTR (Print: blue)
               const opacity = Math.min(0.85, diffX / 160);
               row.style.backgroundColor = 'rgba(59, 130, 246, ' + opacity + ')';
               row.style.color = '#ffffff';
             } else {
-              // Swiping Left -> RTL (WhatsApp: green)
               const opacity = Math.min(0.85, -diffX / 160);
               row.style.backgroundColor = 'rgba(37, 211, 102, ' + opacity + ')';
               row.style.color = '#ffffff';
@@ -1417,7 +1449,6 @@ const renderCustomerLedgerView = (customer) => {
 
             if (isSwiping) {
               if (diffX > 100) {
-                // LTR -> Trigger Print
                 row.style.transform = 'translateX(100%)';
                 setTimeout(() => {
                   row.style.transform = '';
@@ -1432,7 +1463,6 @@ const renderCustomerLedgerView = (customer) => {
                   window.print();
                 }, 280);
               } else if (diffX < -100) {
-                // RTL -> Trigger WhatsApp share
                 row.style.transform = 'translateX(-100%)';
                 setTimeout(() => {
                   row.style.transform = '';
@@ -1459,7 +1489,6 @@ const renderCustomerLedgerView = (customer) => {
             }
           }, { passive: true });
 
-          // Standard Click handler
           row.addEventListener('click', () => {
             if (row.dataset.swiped === 'true') return;
             openInvoiceDetailsModal(sale);
@@ -1515,7 +1544,7 @@ const renderCustomersList = () => {
   if (hasError && customers.length === 0) {
     customersList.innerHTML = `
       <div class="text-center py-12">
-        <i class="fa-solid fa-circle-exclamation text-2xl text-red-500 mb-2 block"></i>
+        <i class="fa-solid fa-circle-exclamation text-2xl text-red-505 mb-2 block"></i>
         <span class="text-xs font-bold text-gray-500">فشل في تحميل العملاء</span>
       </div>
     `;
@@ -1538,17 +1567,14 @@ const renderCustomersList = () => {
     return;
   }
 
-  // Sort alphabetically
   filtered.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
   filtered.forEach(c => {
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl border border-gray-100 clean-shadow flex flex-col transition-all overflow-hidden select-none';
     
-    // Status text color for debt
     const debtClass = c.debt > 0 ? 'text-red-500 font-extrabold' : 'text-emerald-500 font-bold';
 
-    // GPS styling classes
     const gpsBtnClass = c.gps 
       ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200' 
       : 'bg-gray-50 text-gray-400 hover:bg-gray-100 border border-gray-200';
@@ -1557,7 +1583,6 @@ const renderCustomersList = () => {
       : 'تسجيل موقع المحل الجغرافي (غير مسجل)';
 
     card.innerHTML = `
-      <!-- Collapsed Main Row -->
       <div class="card-header p-4.5 flex justify-between items-center cursor-pointer hover:bg-gray-50/50 transition-colors select-none">
         <div class="flex-grow min-w-0 pr-1 text-right">
           <h4 class="text-xs font-black text-gray-900">${c.name}</h4>
@@ -1576,12 +1601,10 @@ const renderCustomersList = () => {
         </div>
       </div>
 
-      <!-- Expandable Accordion Content Area -->
       <div class="accordion-content hidden border-t border-gray-50 bg-[#f8f9fa] dark:bg-[#1a1a1a] p-4.5 space-y-3">
-        <!-- Details with subtle location pin -->
-        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-600 dark:text-gray-400 font-bold">
+        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-650 dark:text-gray-400 font-bold">
           <div class="flex items-center gap-1.5 truncate text-right">
-            <i class="fa-solid fa-map-location-dot text-gray-450 text-xs"></i>
+            <i class="fa-solid fa-map-location-dot text-gray-455 text-xs"></i>
             <span class="truncate">${c.address || 'لا يوجد عنوان'}</span>
           </div>
           <div class="flex items-center gap-1.5 text-right">
@@ -1589,7 +1612,6 @@ const renderCustomersList = () => {
             <span>${c.phone || 'لا يوجد هاتف'}</span>
           </div>
         </div>
-        <!-- Actions row -->
         <div class="flex flex-wrap gap-2 pt-1">
           <button class="btn-ledger flex-1 min-w-[75px] py-2.5 bg-white dark:bg-[#2d2d2d] border border-gray-200 dark:border-gray-150 text-gray-700 dark:text-gray-300 text-[9px] font-black rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-[#333333] flex items-center justify-center gap-1 transition-all active:scale-95 shadow-sm">
             <i class="fa-solid fa-receipt text-gray-500 dark:text-gray-400"></i> كشف الحساب
@@ -1621,24 +1643,20 @@ const renderCustomersList = () => {
       }
     });
 
-    // Make Payment directly
     card.querySelector('.btn-make-payment').addEventListener('click', (e) => {
       e.stopPropagation();
       openCustomerProfileModal(c.id);
-      // Auto-open pay debt form container
       if (payDebtFormContainer) {
         payDebtFormContainer.classList.remove('hidden');
         payDebtAmount.value = '';
       }
     });
 
-    // Ledger (Account Statement) click handler
     card.querySelector('.btn-ledger').addEventListener('click', (e) => {
       e.stopPropagation();
       openCustomerProfileModal(c.id);
     });
 
-    // GPS Relocate click handler
     card.querySelector('.btn-gps-relocate').addEventListener('click', async (e) => {
       e.stopPropagation();
       if (await showCustomConfirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
@@ -1667,19 +1685,16 @@ const renderCustomersList = () => {
       }
     });
 
-    // Edit Customer click handler
     card.querySelector('.btn-edit-customer').addEventListener('click', (e) => {
       e.stopPropagation();
       openEditCustomerModal(c);
     });
 
-    // Record Return click handler
     card.querySelector('.btn-return-customer').addEventListener('click', (e) => {
       e.stopPropagation();
       openAddReturnModal(c);
     });
 
-    // WhatsApp click handler
     card.querySelector('.btn-whatsapp').addEventListener('click', (e) => {
       e.stopPropagation();
       triggerWhatsAppRedirect(c.phone);
@@ -1743,7 +1758,7 @@ const renderInventoryList = () => {
     card.innerHTML = `
       <div class="space-y-1 flex-1 min-w-0">
         <h4 class="text-xs font-extrabold text-gray-900 truncate">${p.name}</h4>
-        <div class="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-400 font-bold">
+        <div class="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-450 font-bold">
           <span>شراء: <strong class="text-gray-700">${p.wholesalePrice.toLocaleString()} د.ع</strong></span>
           <span>كارتون: <strong class="text-gray-700">${cartonPrice.toLocaleString()} د.ع</strong></span>
           <span>مفرد: <strong class="text-gray-700">${unitPrice.toLocaleString()} د.ع</strong></span>
@@ -1754,12 +1769,11 @@ const renderInventoryList = () => {
           <span class="text-[9px] text-gray-450 block font-bold">العدد</span>
           <span class="text-xs font-black text-[#1e5631] block">${p.quantity} ${p.unit}</span>
         </div>
-        <!-- Actions: Edit & Delete -->
         <div class="flex gap-2">
-          <button class="btn-edit-product w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center cursor-pointer transition-colors" title="تعديل المنتج">
+          <button class="btn-edit-product w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-805 flex items-center justify-center cursor-pointer transition-colors" title="تعديل المنتج">
             <i class="fa-solid fa-pen text-[10px]"></i>
           </button>
-          <button class="btn-delete-product delete-btn w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors" title="حذف المنتج">
+          <button class="btn-delete-product delete-btn w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-505 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors" title="حذف المنتج">
             <i class="fa-solid fa-trash-can text-[10px]"></i>
           </button>
         </div>
@@ -1782,7 +1796,6 @@ const renderInventoryList = () => {
   applyRBACRules();
 };
 
-// Alias / Wrapper for backwards compatibility or external calls
 const renderProductsList = () => {
   renderSalesGrid();
   renderInventoryList();
@@ -1794,7 +1807,7 @@ const triggerWhatsAppRedirect = (phone) => {
     showArabicToast('عذراً، رقم الهاتف غير متوفر!', 'error');
     return;
   }
-  const cleanNum = phone.replace(/\D/g, ''); // strip out any spaces, non-digits
+  const cleanNum = phone.replace(/\D/g, '');
   const url = `https://wa.me/${cleanNum}`;
   showArabicToast('جاري إعادة التوجيه إلى واتساب...', 'info');
   setTimeout(() => {
@@ -1845,16 +1858,13 @@ const renderCartRows = () => {
     row.innerHTML = `
       <div class="space-y-1 flex-1 pr-1">
         <h4 class="text-xs font-extrabold text-gray-800">${prod.name}</h4>
-        <span class="text-[10px] text-gray-500 font-bold block">${prod.price.toLocaleString()} د.ع / ${prod.unit}</span>
+        <span class="text-[10px] text-gray-505 font-bold block">${prod.price.toLocaleString()} د.ع / ${prod.unit}</span>
       </div>
       <div class="flex items-center gap-2">
-        <!-- Decrement -->
         <button onclick="adjustCartItemQty(${item.productId}, -1)" class="w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
           <i class="fa-solid fa-minus text-[10px]"></i>
         </button>
-        <!-- Val -->
         <span class="text-xs font-black text-gray-900 w-6 text-center select-none">${item.qty}</span>
-        <!-- Increment -->
         <button onclick="adjustCartItemQty(${item.productId}, 1)" class="w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
           <i class="fa-solid fa-plus text-[10px]"></i>
         </button>
@@ -1874,7 +1884,7 @@ const animateCartIcon = () => {
   const cartBtn = document.getElementById('header-cart-btn');
   if (cartBtn) {
     cartBtn.classList.remove('cart-pop');
-    void cartBtn.offsetWidth; // Trigger reflow
+    void cartBtn.offsetWidth;
     cartBtn.classList.add('cart-pop');
     setTimeout(() => {
       cartBtn.classList.remove('cart-pop');
@@ -1888,12 +1898,10 @@ const adjustCartItemQty = (productId, change) => {
   if (!prod) return;
 
   if (change > 0) {
-    // Check stock limit
     if (prod.quantity <= 0) {
       showArabicToast('لا يتوفر مخزون إضافي للمنتج!', 'error');
       return;
     }
-    // Haptic Feedback
     if (navigator.vibrate) {
       try {
         navigator.vibrate(50);
@@ -1912,7 +1920,6 @@ const adjustCartItemQty = (productId, change) => {
     }
   } else {
     if (cartItem) {
-      // Return stock to inventory
       prod.qty += 1;
       prod.quantity += 1;
       cartItem.qty -= 1;
@@ -1951,14 +1958,13 @@ const openProductModal = () => {
   if (productModalTitle) productModalTitle.textContent = "إضافة منتج جديد";
   if (productSubmitBtn) productSubmitBtn.textContent = "حفظ المنتج";
 
-  // Reset chips selector UI to default 'عبوة'
   const pUnitInput = document.getElementById('p-unit');
   const chipPacket = document.getElementById('p-unit-chip-packet');
   const chipCarton = document.getElementById('p-unit-chip-carton');
   if (pUnitInput && chipPacket && chipCarton) {
     pUnitInput.value = 'عبوة';
     chipPacket.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-[#1e5631] text-white border-[#1e5631]';
-    chipCarton.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100';
+    chipCarton.className = 'flex-1 py-3 px-4 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer shadow-sm active:scale-98 bg-gray-50 text-gray-700 border-gray-250 hover:bg-gray-100';
   }
 
   addProductModal.classList.remove('hidden');
@@ -1992,7 +1998,6 @@ const openAddPurchaseModal = () => {
     purDebtDisplay.textContent = 'المتبقي كـ دين للشركة: 0 د.ع';
   }
   
-  // Populate products
   purItemSelect.innerHTML = '';
   const sorted = [...inventory].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   sorted.forEach(prod => {
@@ -2061,7 +2066,7 @@ const renderPurchaseCart = () => {
       </div>
       <div class="flex items-center gap-3">
         <span class="font-black text-[#1e5631]">${totalVal.toLocaleString()} د.ع</span>
-        <button class="text-red-400 hover:text-red-650 cursor-pointer" onclick="deleteFromPurchaseCart(${idx})">
+        <button class="text-red-450 hover:text-red-650 cursor-pointer" onclick="deleteFromPurchaseCart(${idx})">
           <i class="fa-solid fa-trash-can text-[9px]"></i>
         </button>
       </div>
@@ -2104,7 +2109,7 @@ const renderPurchaseHistory = () => {
   const sorted = [...purchases].sort((a, b) => b.id - a.id);
   sorted.forEach(pur => {
     const row = document.createElement('div');
-    row.className = 'bg-[#f4f6f5] p-3.5 rounded-xl border border-gray-100 flex justify-between items-center select-none cursor-pointer hover:border-gray-200 transition-all active:scale-[0.98]';
+    row.className = 'bg-[#f4f6f5] p-3.5 rounded-xl border border-gray-100 flex justify-between items-center select-none cursor-pointer hover:border-gray-250 transition-all active:scale-[0.98]';
     
     row.innerHTML = `
       <div class="space-y-1">
@@ -2191,7 +2196,6 @@ const openSupplierDebtsModal = () => {
   if (paySupplierFormContainer) paySupplierFormContainer.classList.add('hidden');
   if (paySupplierAmount) paySupplierAmount.value = '';
   
-  // Populate supplier select dropdown
   if (paySupplierSelect) {
     paySupplierSelect.innerHTML = '<option value="">-- اختر الشركة --</option>';
     suppliers.forEach(s => {
@@ -2224,7 +2228,6 @@ const renderSuppliersList = () => {
     return;
   }
   
-  // Sort alphabetically
   const sorted = [...suppliers].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   
   sorted.forEach(s => {
@@ -2341,7 +2344,7 @@ const renderReturnCart = () => {
       </div>
       <div class="flex items-center gap-3">
         <span class="font-black text-[#1e5631]">${totalVal.toLocaleString()} د.ع</span>
-        <button class="text-red-500 hover:text-red-700 cursor-pointer" onclick="deleteFromReturnCart(${idx})">
+        <button class="text-red-505 hover:text-red-700 cursor-pointer" onclick="deleteFromReturnCart(${idx})">
           <i class="fa-solid fa-trash-can text-[9px]"></i>
         </button>
       </div>
@@ -2528,7 +2531,6 @@ const deleteProduct = async (product) => {
     name: product.name
   };
 
-  // Optimistic UI updates
   inventory = inventory.filter(item => item.id !== product.id);
   products = inventory;
   saveAllStatesToLocalStorage();
@@ -2582,7 +2584,6 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     toggleQuickCustomerMode(false);
   }
   
-  // Calculate cart subtotal sum
   let sum = 0;
   cart.forEach(item => {
     const prod = inventory.find(p => p.id === item.productId);
@@ -2592,19 +2593,16 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
   checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
   checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
   
-  // Clear inputs
   checkoutDiscount.value = '';
   if (checkoutSavings) checkoutSavings.value = '';
   checkoutReceivedInput.value = '';
   
-  // Dynamic debt badge init to Deferred (آجل)
   updateCheckoutDebtBadge(sum, 0);
 
-  // Auto fill date
   const now = new Date();
   checkoutDateInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
 
-  // Populate customers select dropdown
+  const currentSelectedValue = checkoutCustomerSelect.value;
   checkoutCustomerSelect.innerHTML = '';
   customers.forEach(c => {
     const opt = document.createElement('option');
@@ -2613,8 +2611,13 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     checkoutCustomerSelect.appendChild(opt);
   });
 
-  // Set default custom dropdown label
-  if (customers.length > 0) {
+  if (currentSelectedValue && customers.some(c => c.id == currentSelectedValue)) {
+    checkoutCustomerSelect.value = currentSelectedValue;
+    const cust = customers.find(c => c.id == currentSelectedValue);
+    if (cust && customCustomerDropdownLabel) {
+      customCustomerDropdownLabel.textContent = `${cust.name} (${cust.address})`;
+    }
+  } else if (customers.length > 0) {
     const defaultCust = customers[0];
     checkoutCustomerSelect.value = defaultCust.id;
     if (customCustomerDropdownLabel) {
@@ -2644,7 +2647,6 @@ const closeCheckoutModal = () => {
     checkoutModal.classList.add('hidden');
   }, 220);
 
-  // Reset scroll position to fix mobile keyboard viewport shift
   window.scrollTo(0, 0);
   document.body.scrollTop = 0;
   if (document.documentElement) {
@@ -2655,15 +2657,12 @@ const closeCheckoutModal = () => {
 // --- DYNAMIC CHECKOUT DEBT BADGE CALCULATOR ---
 const updateCheckoutDebtBadge = (finalVal, receivedVal) => {
   if (isNaN(receivedVal) || receivedVal <= 0) {
-    // 100% Debt / Deferred
     checkoutDebtBadge.textContent = 'آجل';
     checkoutDebtBadge.className = 'px-3.5 py-2.5 rounded-xl text-xs font-black text-center min-w-[70px] bg-red-50 text-red-700 border border-red-200 select-none';
   } else if (receivedVal < finalVal) {
-    // Partial payment
     checkoutDebtBadge.textContent = 'جزئي';
     checkoutDebtBadge.className = 'px-3.5 py-2.5 rounded-xl text-xs font-black text-center min-w-[70px] bg-amber-50 text-amber-700 border border-amber-200 select-none';
   } else {
-    // Fully Paid
     checkoutDebtBadge.textContent = 'مدفوع';
     checkoutDebtBadge.className = 'px-3.5 py-2.5 rounded-xl text-xs font-black text-center min-w-[70px] bg-emerald-50 text-emerald-700 border border-emerald-200 select-none';
   }
@@ -2691,7 +2690,6 @@ const triggerCheckoutPricingRefresh = () => {
 
 // --- EVENT LISTENERS ---
 
-// Header Kebab Menu Dropdown
 if (headerMenuBtn) headerMenuBtn.addEventListener('click', toggleHeaderMenuDropdown);
 if (menuSalesHistoryBtn) {
   menuSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
@@ -2700,19 +2698,16 @@ if (headerSalesHistoryBtn) {
   headerSalesHistoryBtn.addEventListener('click', openSalesHistoryModal);
 }
 
-// Close dropdown when clicking outside
 document.addEventListener('click', () => {
   if (headerMenuDropdown && !headerMenuDropdown.classList.contains('hidden')) {
     closeHeaderMenuDropdown();
   }
 });
 
-// SPA Tab switching
 if (navSales) navSales.addEventListener('click', () => switchView('sales'));
 if (navCustomers) navCustomers.addEventListener('click', () => switchView('customers'));
 if (navInventory) navInventory.addEventListener('click', () => switchView('inventory'));
 
-// Shortcut buttons
 if (customersAddBtnShortcut) customersAddBtnShortcut.addEventListener('click', openCustomerModal);
 if (inventoryAddBtnShortcut) inventoryAddBtnShortcut.addEventListener('click', openProductModal);
 
@@ -2736,7 +2731,6 @@ if (inventorySearchBar) {
   });
 }
 
-// Giant Hero FAB (guarded)
 if (headerAddBtn) headerAddBtn.addEventListener('click', openQuickMenu);
 if (quickMenuDismiss) quickMenuDismiss.addEventListener('click', closeQuickMenu);
 if (quickMenuClose) quickMenuClose.addEventListener('click', closeQuickMenu);
@@ -2744,59 +2738,6 @@ if (quickMenuClose) quickMenuClose.addEventListener('click', closeQuickMenu);
 if (quickAddProduct) quickAddProduct.addEventListener('click', openProductModal);
 if (quickAddCustomer) quickAddCustomer.addEventListener('click', openCustomerModal);
 
-// Unified Floating Action Button (FAB) Bindings
-if (mainFabBtn) {
-  mainFabBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (fabOptions) fabOptions.classList.toggle('active');
-    if (mainFabIcon) mainFabIcon.classList.toggle('active');
-  });
-}
-
-document.addEventListener('click', (e) => {
-  if (fabOptions && fabOptions.classList.contains('active') && !e.target.closest('#unified-fab-container')) {
-    fabOptions.classList.remove('active');
-    if (mainFabIcon) mainFabIcon.classList.remove('active');
-  }
-});
-
-const recordInvoiceFlow = () => {
-  if (cart && cart.length > 0) {
-    openCheckoutModal();
-  } else {
-    showArabicToast('سلة المبيعات فارغة! تم فتح المساعد الذكي لتسجيل الفاتورة صوتياً.', 'info');
-    openSmartAiModal();
-  }
-};
-
-if (fabAddProduct) {
-  fabAddProduct.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (fabOptions) fabOptions.classList.remove('active');
-    if (mainFabIcon) mainFabIcon.classList.remove('active');
-    openProductModal();
-  });
-}
-
-if (fabAddCustomer) {
-  fabAddCustomer.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (fabOptions) fabOptions.classList.remove('active');
-    if (mainFabIcon) mainFabIcon.classList.remove('active');
-    openCustomerModal();
-  });
-}
-
-if (fabRecordInvoice) {
-  fabRecordInvoice.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (fabOptions) fabOptions.classList.remove('active');
-    if (mainFabIcon) mainFabIcon.classList.remove('active');
-    recordInvoiceFlow();
-  });
-}
-
-// Modal dismiss handles
 if (addProductDismiss) addProductDismiss.addEventListener('click', closeProductModal);
 if (addProductClose) addProductClose.addEventListener('click', closeProductModal);
 
@@ -2816,7 +2757,6 @@ if (salesHistoryClose) salesHistoryClose.addEventListener('click', closeSalesHis
 if (customerProfileDismiss) customerProfileDismiss.addEventListener('click', closeCustomerProfileModal);
 if (customerProfileClose) customerProfileClose.addEventListener('click', closeCustomerProfileModal);
 
-// --- NEW FEATURES EVENT LISTENERS ---
 if (menuSupplierDebtsBtn) menuSupplierDebtsBtn.addEventListener('click', openSupplierDebtsModal);
 if (supplierDebtsClose) supplierDebtsClose.addEventListener('click', closeSupplierDebtsModal);
 if (editProductClose) editProductClose.addEventListener('click', closeEditProductModal);
@@ -2858,7 +2798,6 @@ if (paySupplierSubmit) {
       amount: paidAmount
     };
 
-    // Optimistic UI update
     const supp = suppliers.find(s => s.name === companyName);
     if (supp) {
       supp.debt = Math.max(0, supp.debt - paidAmount);
@@ -2871,7 +2810,7 @@ if (paySupplierSubmit) {
     
     saveAllStatesToLocalStorage();
     renderSuppliersList();
-    openSupplierDebtsModal(); // re-populate dropdown
+    openSupplierDebtsModal();
     
     showArabicToast("تم تسجيل الدفعة وتخفيض الدين بنجاح!", "success");
     addToSyncQueue(payload);
@@ -2891,7 +2830,6 @@ if (purPaidAmount) {
   });
 }
 
-// Debt Payment listeners
 if (profilePayDebtBtn) {
   profilePayDebtBtn.addEventListener('click', () => {
     if (payDebtFormContainer) {
@@ -2932,7 +2870,6 @@ if (payDebtSubmit) {
       amount: amount
     };
 
-    // Optimistic UI updates
     activeProfileCustomer.debt = Math.max(0, activeProfileCustomer.debt - amount);
     const cIdx = customers.findIndex(c => c.id === activeProfileCustomer.id);
     if (cIdx !== -1) {
@@ -2970,7 +2907,6 @@ if (payDebtSubmit) {
 if (invoiceDetailsDismiss) invoiceDetailsDismiss.addEventListener('click', closeInvoiceDetailsModal);
 if (invoiceDetailsClose) invoiceDetailsClose.addEventListener('click', closeInvoiceDetailsModal);
 
-// Procurement System listeners
 if (headerPurchaseBtn) {
   headerPurchaseBtn.addEventListener('click', openAddPurchaseModal);
 }
@@ -3051,7 +2987,6 @@ if (purSubmitBtn) {
       items: payloadItems
     };
 
-    // Optimistic UI updates: update local inventory and purchases list
     purchaseCart.forEach(item => {
       const prod = inventory.find(p => p.id === item.productId);
       if (prod) {
@@ -3148,7 +3083,6 @@ if (retSubmitBtn) {
       items: payloadItems
     };
 
-    // Optimistically update local inventory
     returnCart.forEach(item => {
       const prod = inventory.find(p => p.id === item.productId);
       if (prod) {
@@ -3157,7 +3091,6 @@ if (retSubmitBtn) {
       }
     });
     
-    // If method was Deduct from Debt, update customer debt locally
     if (selectedMethod === "خصم من الدين") {
       const cust = customers.find(c => c.id === activeReturnCustomer.id);
       if (cust) {
@@ -3172,16 +3105,13 @@ if (retSubmitBtn) {
     renderInventoryList();
     renderSalesGrid();
 
-    // Sync in background
     addToSyncQueue(payload);
   });
 }
 
-// Dynamic pricing listeners
 if (checkoutDiscount) checkoutDiscount.addEventListener('input', triggerCheckoutPricingRefresh);
 if (checkoutReceivedInput) checkoutReceivedInput.addEventListener('input', triggerCheckoutPricingRefresh);
 
-// WHATSAPP SHORTCUT REDIRECT IN ADD CUSTOMER MODAL
 if (cWhatsAppBtn) {
   cWhatsAppBtn.addEventListener('click', () => {
     const phoneVal = document.getElementById('c-phone') ? document.getElementById('c-phone').value.trim() : '';
@@ -3192,59 +3122,56 @@ if (cWhatsAppBtn) {
 // SUBMIT: SAVE PRODUCT FORM (ADD NEW PRODUCT ONLY)
 if (productForm) {
   productForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  
-  const name = document.getElementById('p-name').value.trim();
-  const barcode = document.getElementById('p-barcode').value.trim();
-  const sell = parseFloat(document.getElementById('p-sell').value);
-  const buy = parseFloat(document.getElementById('p-buy').value);
-  const wholesale = 0;
-  const unit = document.getElementById('p-unit').value;
-  const qty = parseInt(document.getElementById('p-qty').value) || 0;
+    e.preventDefault();
+    
+    const name = document.getElementById('p-name').value.trim();
+    const barcode = document.getElementById('p-barcode').value.trim();
+    const sell = parseFloat(document.getElementById('p-sell').value);
+    const buy = parseFloat(document.getElementById('p-buy').value);
+    const wholesale = 0;
+    const unit = document.getElementById('p-unit').value;
+    const qty = parseInt(document.getElementById('p-qty').value) || 0;
 
-  if (!name || isNaN(sell) || isNaN(buy)) {
-    showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
-    return;
-  }
+    if (!name || isNaN(sell) || isNaN(buy)) {
+      showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
+      return;
+    }
 
-  // Create new item in mock database
-  const newProd = {
-    id: inventory.length > 0 ? Math.max(...inventory.map(p => p.id)) + 1 : 1,
-    name,
-    quantity: qty,
-    qty,
-    price: sell,
-    sellPrice: sell,
-    wholesalePrice: buy,
-    costPrice: buy,
-    category: 'الغذائيات',
-    unit,
-    barcode
-  };
+    const newProd = {
+      id: inventory.length > 0 ? Math.max(...inventory.map(p => p.id)) + 1 : 1,
+      name,
+      quantity: qty,
+      qty,
+      price: sell,
+      sellPrice: sell,
+      wholesalePrice: buy,
+      costPrice: buy,
+      category: 'الغذائيات',
+      unit,
+      barcode
+    };
 
-  inventory.push(newProd);
+    inventory.push(newProd);
 
-  // Send to Apps Script Backend
-  const payload = {
-    action: "addProduct",
-    name: name,
-    barcode: barcode,
-    buyPrice: buy,
-    sellPrice: sell,
-    wholesalePrice: wholesale,
-    category: unit,
-    quantity: qty
-  };
+    const payload = {
+      action: "addProduct",
+      name: name,
+      barcode: barcode,
+      buyPrice: buy,
+      sellPrice: sell,
+      wholesalePrice: wholesale,
+      category: unit,
+      quantity: qty
+    };
 
-  saveAllStatesToLocalStorage();
-  productForm.reset();
-  closeProductModal();
-  showArabicToast('تم حفظ المنتج بنجاح!', 'success');
-  renderSalesGrid();
-  renderInventoryList();
+    saveAllStatesToLocalStorage();
+    productForm.reset();
+    closeProductModal();
+    showArabicToast('تم حفظ المنتج بنجاح!', 'success');
+    renderSalesGrid();
+    renderInventoryList();
 
-  // Sync in background
-  addToSyncQueue(payload);
+    addToSyncQueue(payload);
   });
 }
 
@@ -3280,7 +3207,6 @@ if (editProductForm) {
       quantity: quantity
     };
 
-    // Update local state
     editingProduct.name = newName;
     editingProduct.barcode = barcode;
     editingProduct.sellPrice = sellPrice;
@@ -3329,7 +3255,6 @@ if (editCustomerForm) {
       gps: editingCustomer.gps || ''
     };
 
-    // Update local state
     editingCustomer.name = newShopName;
     editingCustomer.address = address;
     editingCustomer.phone = phone;
@@ -3345,270 +3270,274 @@ if (editCustomerForm) {
   });
 }
 
-// SUBMIT: SAVE CUSTOMER FORM
+// SUBMIT: SAVE CUSTOMER FORM (PREVENT DUPLICATION & CAPTURE GPS)
 if (customerForm) {
   customerForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  const name = document.getElementById('c-name').value.trim();
-  const address = document.getElementById('c-address').value.trim();
-  const phone = document.getElementById('c-phone').value.trim();
-  const debt = parseFloat(document.getElementById('c-debt').value) || 0;
-  const useGps = document.getElementById('c-use-gps').checked;
+    const name = document.getElementById('c-name').value.trim();
+    const address = document.getElementById('c-address').value.trim();
+    const phone = document.getElementById('c-phone').value.trim();
+    const debt = parseFloat(document.getElementById('c-debt').value) || 0;
+    const useGps = document.getElementById('c-use-gps').checked;
 
-  if (!name || !address || !phone) {
-    showArabicToast('الرجاء إدخال كافة الحقول المطلوبة', 'error');
-    return;
-  }
+    if (!name || !address || !phone) {
+      showArabicToast('الرجاء إدخال كافة الحقول المطلوبة', 'error');
+      return;
+    }
 
-  let gpsVal = '';
-  if (useGps) {
-    showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
+    // Get and disable the submit button immediately to prevent double submissions
+    const submitBtn = document.getElementById('customer-submit-btn');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'جاري الحفظ...';
+    }
+
+    // Local validation check for duplicates
+    const exists = customers.some(c => c.name.trim().toLowerCase() === name.toLowerCase());
+    if (exists) {
+      alert('هذا العميل مسجل بالفعل');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'حفظ العميل';
+      }
+      return;
+    }
+
+    // Geolocation auto-capture
+    let gpsVal = '';
     try {
       gpsVal = await getCurrentLocation();
       showArabicToast('تم تحديد الموقع الجغرافي بنجاح', 'success');
     } catch (err) {
-      console.error("GPS error:", err);
-      showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
+      console.warn("Auto-GPS capture failed:", err);
+      if (useGps) {
+        showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
+      }
     }
-  }
 
-  // Create customer in mock database
-  const newCustomer = {
-    id: customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1,
-    name,
-    address,
-    phone,
-    debt,
-    gps: gpsVal
-  };
+    const newCustomer = {
+      id: customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1,
+      name,
+      address,
+      phone,
+      debt,
+      gps: gpsVal
+    };
 
-  customers.push(newCustomer);
+    customers.push(newCustomer);
 
-  // Send to Apps Script Backend
-  const payload = {
-    action: "addCustomer",
-    shopName: name,
-    address: address,
-    phone: phone,
-    debt: debt,
-    gps: gpsVal
-  };
+    const payload = {
+      action: "addCustomer",
+      shopName: name,
+      address: address,
+      phone: phone,
+      debt: debt,
+      gps: gpsVal
+    };
 
-  saveAllStatesToLocalStorage();
-  customerForm.reset();
-  closeCustomerModal();
-  showArabicToast('تم حفظ العميل بنجاح!', 'success');
-  renderCustomersList();
+    saveAllStatesToLocalStorage();
+    customerForm.reset();
+    closeCustomerModal();
+    showArabicToast('تم حفظ العميل بنجاح!', 'success');
+    renderCustomersList();
 
-  // Sync in background
-  addToSyncQueue(payload);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'حفظ العميل';
+    }
+
+    addToSyncQueue(payload);
   });
 }
 
-// Complete Cart Checkout triggers Complete sale modal
 if (cartCompleteSaleBtn) cartCompleteSaleBtn.addEventListener('click', openCheckoutModal);
 
 // CONFIRM CHECKOUT FORM
 if (checkoutConfirmBtn) {
   checkoutConfirmBtn.addEventListener('click', async () => {
-  // Disable button to prevent double submissions
-  checkoutConfirmBtn.disabled = true;
-  const originalBtnText = checkoutConfirmBtn.textContent;
-  checkoutConfirmBtn.textContent = 'جاري الحفظ...';
+    checkoutConfirmBtn.disabled = true;
+    const originalBtnText = checkoutConfirmBtn.textContent;
+    checkoutConfirmBtn.textContent = 'جاري الحفظ...';
 
-  try {
-    // 1. Calculate the actual cart total (subtotal of all items in the cart)
-    let subtotal = 0;
-    cart.forEach(item => {
-      const prod = inventory.find(p => p.id === item.productId);
-      if (prod) subtotal += prod.price * item.qty;
-    });
+    try {
+      const discountInput = document.getElementById('checkout-discount');
+      const savingsInput = document.getElementById('checkout-savings');
+      const receivedInput = document.getElementById('checkout-received-input');
 
-    // 2. Safely read inputs
-    const discountInput = document.getElementById('checkout-discount');
-    const savingsInput = document.getElementById('checkout-savings');
-    const receivedInput = document.getElementById('checkout-received-input');
+      const discount = discountInput ? (parseFloat(discountInput.value) || 0) : 0;
+      const savings = savingsInput ? (parseFloat(savingsInput.value) || 0) : 0;
+      const received = receivedInput ? (parseFloat(receivedInput.value) || 0) : 0;
+      
+      // Recalculate subtotal sum accurately from actual cart state
+      let actualSubtotal = 0;
+      cart.forEach(item => {
+        const prod = inventory.find(p => p.id === item.productId);
+        if (prod) actualSubtotal += prod.price * item.qty;
+      });
+      
+      const finalVal = Math.max(0, actualSubtotal - discount);
 
-    const discount = discountInput ? (parseFloat(discountInput.value) || 0) : 0;
-    const savings = savingsInput ? (parseFloat(savingsInput.value) || 0) : 0;
-    const received = receivedInput ? (parseFloat(receivedInput.value) || 0) : 0;
-    const finalVal = Math.max(0, subtotal - discount);
+      let customerName = 'عميل عام';
+      let customer = null;
 
-    let customerName = 'عميل عام';
-    let customer = null;
-
-    // Check customer mode
-    if (isQuickCustomerActive) {
-      const quickNameInput = document.getElementById('checkout-quick-customer-name');
-      const theNewName = quickNameInput ? quickNameInput.value.trim() : '';
-      if (!theNewName) {
-        showArabicToast('الرجاء إدخال اسم المحل الجديد', 'error');
-        checkoutConfirmBtn.disabled = false;
-        checkoutConfirmBtn.textContent = originalBtnText;
-        return;
-      }
-
-      // Check GPS checkbox
-      const useGps = document.getElementById('checkout-quick-customer-gps').checked;
-      let gpsVal = '';
-      if (useGps) {
-        showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
-        try {
-          gpsVal = await getCurrentLocation();
-          showArabicToast('تم تحديد الموقع الجغرافي بنجاح', 'success');
-        } catch (err) {
-          console.error("GPS error:", err);
-          showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
+      if (isQuickCustomerActive) {
+        const quickNameInput = document.getElementById('checkout-quick-customer-name');
+        const theNewName = quickNameInput ? quickNameInput.value.trim() : '';
+        if (!theNewName) {
+          showArabicToast('الرجاء إدخال اسم المحل الجديد', 'error');
+          checkoutConfirmBtn.disabled = false;
+          checkoutConfirmBtn.textContent = originalBtnText;
+          return;
         }
-      }
 
-      // Check if customer already exists locally
-      const existing = customers.find(c => c.name.toLowerCase() === theNewName.toLowerCase());
-      if (existing) {
-        customer = existing;
-        customerName = customer.name;
-        if (received < finalVal) {
-          customer.debt += (finalVal - received);
-        }
-      } else {
-        // Create customer locally first
-        const newCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
-        customer = {
-          id: newCustomerId,
-          name: theNewName,
-          address: "يكمل لاحقاً",
-          phone: "-",
-          debt: received < finalVal ? (finalVal - received) : 0,
-          gps: gpsVal
-        };
-        customers.push(customer);
-        customerName = theNewName;
-
-        // Post request to create customer - queue it!
-        const addCustomerPayload = {
-          action: "addCustomer",
-          shopName: theNewName,
-          address: "يكمل لاحقاً",
-          phone: "-",
-          debt: 0,
-          gps: gpsVal
-        };
-        addToSyncQueue(addCustomerPayload);
-      }
-    } else {
-      const customerSelect = document.getElementById('checkout-customer-select');
-      const customerId = customerSelect ? customerSelect.value : '';
-      customer = customers.find(c => c.id == customerId);
-      customerName = customer ? customer.name : 'عميل عام';
-
-      if (customer && received < finalVal) {
-        const debtIncrease = finalVal - received;
-        customer.debt += debtIncrease;
-      }
-
-      // Prompt for GPS if customer lacks location
-      if (customer && !customer.gps) {
-        if (await showCustomConfirm("هذا المحل غير مسجل جغرافياً، هل تريد حفظ موقعك الحالي للمحل؟")) {
+        const useGps = document.getElementById('checkout-quick-customer-gps').checked;
+        let gpsVal = '';
+        if (useGps) {
           showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
           try {
-            const gpsVal = await getCurrentLocation();
-            
-            const updatePayload = {
-              action: "updateCustomer",
-              oldShopName: customer.name,
-              shopName: customer.name,
-              address: customer.address,
-              phone: customer.phone,
-              gps: gpsVal
-            };
-
-            // Update locally
-            customer.gps = gpsVal;
-            showArabicToast('تم تسجيل الموقع الجغرافي للمحل بنجاح!', 'success');
-            addToSyncQueue(updatePayload);
+            gpsVal = await getCurrentLocation();
+            showArabicToast('تم تحديد الموقع الجغرافي بنجاح', 'success');
           } catch (err) {
-            console.error("GPS error during checkout confirmation:", err);
-            showArabicToast("فشل حفظ موقع GPS للمحل: " + err.message, "error");
+            console.error("GPS error:", err);
+            showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
+          }
+        }
+
+        const existing = customers.find(c => c.name.toLowerCase() === theNewName.toLowerCase());
+        if (existing) {
+          customer = existing;
+          customerName = customer.name;
+          if (received < finalVal) {
+            customer.debt += (finalVal - received);
+          }
+        } else {
+          const newCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
+          customer = {
+            id: newCustomerId,
+            name: theNewName,
+            address: "يكمل لاحقاً",
+            phone: "-",
+            debt: received < finalVal ? (finalVal - received) : 0,
+            gps: gpsVal
+          };
+          customers.push(customer);
+          customerName = theNewName;
+
+          const addCustomerPayload = {
+            action: "addCustomer",
+            shopName: theNewName,
+            address: "يكمل لاحقاً",
+            phone: "-",
+            debt: 0,
+            gps: gpsVal
+          };
+          addToSyncQueue(addCustomerPayload);
+        }
+      } else {
+        const customerSelect = document.getElementById('checkout-customer-select');
+        const customerId = customerSelect ? customerSelect.value : '';
+        customer = customers.find(c => c.id == customerId);
+        customerName = customer ? customer.name : 'عميل عام';
+
+        if (customer && received < finalVal) {
+          const debtIncrease = finalVal - received;
+          customer.debt += debtIncrease;
+        }
+
+        if (customer && !customer.gps) {
+          if (await showCustomConfirm("هذا المحل غير مسجل جغرافياً، هل تريد حفظ موقعك الحالي للمحل؟")) {
+            showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
+            try {
+              const gpsVal = await getCurrentLocation();
+              
+              const updatePayload = {
+                action: "updateCustomer",
+                oldShopName: customer.name,
+                shopName: customer.name,
+                address: customer.address,
+                phone: customer.phone,
+                gps: gpsVal
+              };
+
+              customer.gps = gpsVal;
+              showArabicToast('تم تسجيل الموقع الجغرافي للمحل بنجاح!', 'success');
+              addToSyncQueue(updatePayload);
+            } catch (err) {
+              console.error("GPS error during checkout confirmation:", err);
+              showArabicToast("فشل حفظ موقع GPS للمحل: " + err.message, "error");
+            }
           }
         }
       }
-    }
 
-    // 3. Determine status
-    let statusText = 'مدفوع';
-    if (received <= 0) {
-      statusText = 'آجل';
-    } else if (received < finalVal) {
-      statusText = 'جزئي';
-    }
+      let statusText = 'مدفوع';
+      if (received <= 0) {
+        statusText = 'آجل';
+      } else if (received < finalVal) {
+        statusText = 'جزئي';
+      }
 
-    // 4. Generate unique invoice ID and capture current date
-    const now = new Date();
-    const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-    const invoiceId = "INV-" + Date.now();
+      const now = new Date();
+      const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const invoiceId = "INV-" + Date.now();
 
-    // 5. Map the cart items to the format expected by the backend
-    const cartArray = cart.map(item => {
-      const prod = inventory.find(p => p.id === item.productId);
-      return {
-        name: prod ? prod.name : 'منتج غير معروف',
-        qty: item.qty,
-        price: prod ? prod.price : 0
+      const cartArray = cart.map(item => {
+        const prod = inventory.find(p => p.id === item.productId);
+        return {
+          name: prod ? prod.name : 'منتج غير معروف',
+          qty: item.qty,
+          price: prod ? prod.price : 0
+        };
+      });
+
+      const saleObject = {
+        id: salesHistory.length > 0 ? Math.max(...salesHistory.map(s => s.id)) + 1 : 1,
+        invoiceId: invoiceId,
+        date: dateStr,
+        customerName: customerName,
+        totalAmount: finalVal,
+        subtotal: actualSubtotal,
+        discount: discount,
+        savings: savings,
+        receivedAmount: received,
+        status: statusText,
+        items: cartArray
       };
-    });
+      salesHistory.push(saleObject);
 
-    // 6. Append to local sales history
-    const saleObject = {
-      id: salesHistory.length > 0 ? Math.max(...salesHistory.map(s => s.id)) + 1 : 1,
-      invoiceId: invoiceId,
-      date: dateStr,
-      customerName: customerName,
-      totalAmount: finalVal,
-      subtotal: subtotal,
-      discount: discount,
-      savings: savings,
-      receivedAmount: received,
-      status: statusText,
-      items: cartArray
-    };
-    salesHistory.push(saleObject);
+      const addSalePayload = {
+        action: "addSale",
+        invoiceId: invoiceId,
+        customerName: customerName,
+        date: dateStr,
+        totalAmount: actualSubtotal,
+        receivedAmount: received,
+        discount: discount,
+        savings: savings,
+        status: statusText,
+        items: cartArray,
+        sellerName: activeUser ? activeUser['اسم المستخدم'] : 'بائع عام'
+      };
 
-    // 7. Build payload for backend
-    const addSalePayload = {
-      action: "addSale",
-      invoiceId: invoiceId,
-      customerName: customerName,
-      date: dateStr,
-      totalAmount: subtotal,
-      receivedAmount: received,
-      discount: discount,
-      savings: savings,
-      status: statusText,
-      items: cartArray,
-      sellerName: activeUser ? activeUser['اسم المستخدم'] : 'بائع عام'
-    };
+      cart = [];
+      updateCartBadge();
+      renderSalesGrid();
+      renderCustomersList();
+      closeCheckoutModal();
+      saveAllStatesToLocalStorage();
+      openInvoiceOptionsModal(saleObject, customer);
 
-    // 8. Clean up and open Options Modal
-    cart = [];
-    updateCartBadge();
-    renderSalesGrid();
-    renderCustomersList();
-    closeCheckoutModal();
-    saveAllStatesToLocalStorage();
-    openInvoiceOptionsModal(saleObject, customer);
+      addToSyncQueue(addSalePayload);
 
-    // 9. Sync payload in background
-    addToSyncQueue(addSalePayload);
-
-  } catch (error) {
-    console.error("Critical error in checkout confirm handler:", error);
-    showArabicToast("حدث خطأ غير متوقع أثناء عملية البيع", "error");
-  } finally {
-    checkoutConfirmBtn.disabled = false;
-    checkoutConfirmBtn.textContent = originalBtnText;
-  }
-});
+    } catch (error) {
+      console.error("Critical error in checkout confirm handler:", error);
+      showArabicToast("حدث خطأ غير متوقع أثناء عملية البيع", "error");
+    } finally {
+      checkoutConfirmBtn.disabled = false;
+      checkoutConfirmBtn.textContent = originalBtnText;
+    }
+  });
 }
 
 if (successModalDoneBtn) {
@@ -3760,6 +3689,49 @@ let recognition = null;
 let isRecording = false;
 let isRetryingSpeech = false;
 let hasRetriedOnNetworkError = false;
+let liveSpeechOverlay = null;
+
+const createLiveSpeechOverlay = () => {
+  if (document.getElementById('live-speech-overlay')) return;
+  
+  liveSpeechOverlay = document.createElement('div');
+  liveSpeechOverlay.id = 'live-speech-overlay';
+  liveSpeechOverlay.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 w-11/12 max-w-sm bg-white/95 dark:bg-black/90 backdrop-blur-md border border-gray-250/50 dark:border-gray-800/80 p-4 rounded-2xl shadow-xl z-[999] flex flex-col items-center gap-3 transition-all duration-300 pointer-events-none opacity-0 translate-y-4';
+  
+  liveSpeechOverlay.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+      <span class="text-[10px] font-black text-gray-500 dark:text-gray-400">مساعد الذكاء الاصطناعي يستمع...</span>
+    </div>
+    <p id="live-speech-text" class="text-xs font-bold text-gray-700 dark:text-gray-200 text-center leading-relaxed max-h-16 overflow-y-auto px-2 select-none">تحدث الآن...</p>
+  `;
+  
+  document.body.appendChild(liveSpeechOverlay);
+  
+  // Trigger entry animation
+  requestAnimationFrame(() => {
+    liveSpeechOverlay.classList.remove('opacity-0', 'translate-y-4');
+    liveSpeechOverlay.classList.add('opacity-100', 'translate-y-0');
+  });
+};
+
+const updateLiveSpeechText = (text) => {
+  const textEl = document.getElementById('live-speech-text');
+  if (textEl && text.trim()) {
+    textEl.textContent = text;
+  }
+};
+
+const destroyLiveSpeechOverlay = () => {
+  const el = document.getElementById('live-speech-overlay');
+  if (el) {
+    el.classList.remove('opacity-100', 'translate-y-0');
+    el.classList.add('opacity-0', 'translate-y-4');
+    setTimeout(() => {
+      el.remove();
+    }, 300);
+  }
+};
 
 const processSmartVoice = async (transcript) => {
   showArabicToast('جاري تحليل الصوت بذكاء...', 'info');
@@ -3777,94 +3749,95 @@ const processSmartVoice = async (transcript) => {
     console.log("Smart voice response result:", result);
     
     if (result.status === "error") {
-      showArabicToast("خطأ من السيرفر: " + result.message, "error");
+      alert(result.message);
       return;
     }
 
-    const data = result.aiData || result;
+    if (result.status === "success") {
+      const data = result.aiData || result;
 
-    // Set Customer
-    const customerName = data.customer || data.customerName;
-    if (customerName) {
-      const match = customers.find(c => 
-        c.name.toLowerCase().includes(customerName.toLowerCase()) ||
-        customerName.toLowerCase().includes(c.name.toLowerCase())
-      );
-      if (match) {
-        toggleQuickCustomerMode(false);
-        checkoutCustomerSelect.value = match.id;
-        if (customCustomerDropdownLabel) {
-          customCustomerDropdownLabel.textContent = `${match.name} (${match.address})`;
-        }
-      } else {
-        toggleQuickCustomerMode(true);
-        if (checkoutQuickCustomerName) {
-          checkoutQuickCustomerName.value = customerName;
-        }
-        showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerName}"`, "info");
-      }
-    }
-
-    // Add Items
-    const items = data.items;
-    if (items && Array.isArray(items) && items.length > 0) {
-      // Revert local inventory for existing cart
-      cart.forEach(item => {
-        const prod = inventory.find(p => p.id === item.productId);
-        if (prod) {
-          prod.qty += item.qty;
-          prod.quantity += item.qty;
-        }
-      });
-      cart = [];
-
-      items.forEach(aiItem => {
-        const prod = inventory.find(p => 
-          p.name.toLowerCase().includes(aiItem.name.toLowerCase()) ||
-          aiItem.name.toLowerCase().includes(p.name.toLowerCase())
+      const customerName = data.customer || data.customerName;
+      if (customerName) {
+        const match = customers.find(c => 
+          c.name.toLowerCase().includes(customerName.toLowerCase()) ||
+          customerName.toLowerCase().includes(c.name.toLowerCase())
         );
-        if (prod) {
-          const qtyToAdd = parseInt(aiItem.qty) || 1;
-          const actualQty = Math.min(prod.quantity, qtyToAdd);
-          if (actualQty > 0) {
-            prod.qty -= actualQty;
-            prod.quantity -= actualQty;
-            cart.push({
-              productId: prod.id,
-              qty: actualQty
-            });
-            if (actualQty < qtyToAdd) {
-              showArabicToast(`تمت إضافة ${actualQty} فقط من "${prod.name}" لنفاد المخزون`, "info");
-            }
-          } else {
-            showArabicToast(`المنتج "${prod.name}" نفد من المخزن!`, "error");
+        if (match) {
+          toggleQuickCustomerMode(false);
+          checkoutCustomerSelect.value = match.id;
+          if (customCustomerDropdownLabel) {
+            customCustomerDropdownLabel.textContent = `${match.name} (${match.address})`;
           }
         } else {
-          showArabicToast(`لم يتم العثور على منتج باسم "${aiItem.name}"`, "error");
+          toggleQuickCustomerMode(true);
+          if (checkoutQuickCustomerName) {
+            checkoutQuickCustomerName.value = customerName;
+          }
+          showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerName}"`, "info");
         }
+      }
+
+      const items = data.items;
+      if (items && Array.isArray(items) && items.length > 0) {
+        cart.forEach(item => {
+          const prod = inventory.find(p => p.id === item.productId);
+          if (prod) {
+            prod.qty += item.qty;
+            prod.quantity += item.qty;
+          }
+        });
+        cart = [];
+
+        items.forEach(aiItem => {
+          const prod = inventory.find(p => 
+            p.name.toLowerCase().includes(aiItem.name.toLowerCase()) ||
+            aiItem.name.toLowerCase().includes(p.name.toLowerCase())
+          );
+          if (prod) {
+            const qtyToAdd = parseInt(aiItem.qty) || 1;
+            const actualQty = Math.min(prod.quantity, qtyToAdd);
+            if (actualQty > 0) {
+              prod.qty -= actualQty;
+              prod.quantity -= actualQty;
+              cart.push({
+                productId: prod.id,
+                qty: actualQty
+              });
+              if (actualQty < qtyToAdd) {
+                showArabicToast(`تمت إضافة ${actualQty} فقط من "${prod.name}" لنفاد المخزون`, "info");
+              }
+            } else {
+              showArabicToast(`المنتج "${prod.name}" نفد من المخزن!`, "error");
+            }
+          } else {
+            showArabicToast(`لم يتم العثور على منتج باسم "${aiItem.name}"`, "error");
+          }
+        });
+
+        updateCartBadge();
+        renderSalesGrid();
+        renderCartRows();
+      }
+
+      let sum = 0;
+      cart.forEach(item => {
+        const prod = inventory.find(p => p.id === item.productId);
+        if (prod) sum += prod.price * item.qty;
       });
+      if (checkoutSubtotalVal) checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
+      if (checkoutFinalVal) checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
+      triggerCheckoutPricingRefresh();
 
-      updateCartBadge();
-      renderSalesGrid();
-      renderCartRows();
+      openCheckoutModal(true);
+      showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
+    } else {
+      alert("استجابة غير معروفة من السيرفر");
     }
-
-    // Open Checkout Modal
-    let sum = 0;
-    cart.forEach(item => {
-      const prod = inventory.find(p => p.id === item.productId);
-      if (prod) sum += prod.price * item.qty;
-    });
-    if (checkoutSubtotalVal) checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
-    if (checkoutFinalVal) checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
-    triggerCheckoutPricingRefresh();
-
-    openCheckoutModal(true);
-    showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
 
   } catch (err) {
     console.error("Smart voice processing error:", err);
     showArabicToast("فشل الاتصال بالذكاء الاصطناعي: " + err.message, "error");
+    alert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
   }
 };
 
@@ -3880,16 +3853,15 @@ const initSpeechRecognition = () => {
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 3;
-    
-    // Force Arabic (Iraqi) language directly
     recognition.lang = 'ar-IQ';
 
     recognition.onstart = () => {
       isRecording = true;
+      createLiveSpeechOverlay();
       if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
       if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
       if (aiMicBtn) {
-        aiMicBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200', 'recording');
+        aiMicBtn.classList.add('bg-red-50', 'text-red-650', 'border-red-200', 'recording');
       }
       if (salesMicBtn) {
         salesMicBtn.classList.add('recording');
@@ -3897,90 +3869,93 @@ const initSpeechRecognition = () => {
     };
 
     recognition.onresult = (event) => {
-      let transcript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
+      let finalTranscript = '';
+      let interimTranscript = '';
+      let isFinal = false;
+      
+      for (let i = 0; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          transcript += event.results[i][0].transcript;
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
         }
       }
       
-      transcript = transcript.trim();
-      if (!transcript) return;
+      const fullText = finalTranscript + interimTranscript;
+      updateLiveSpeechText(fullText || '...');
 
-      console.log('Recognized Speech:', transcript);
+      if (event.results.length > 0 && event.results[event.results.length - 1].isFinal) {
+        isFinal = true;
+      }
 
-      // Stop recognition to reset UI state after successful parsing
-      stopRecording();
-
-      // Call Gemini smart voice parser
-      processSmartVoice(transcript);
+      if (isFinal && finalTranscript.trim()) {
+        const trimmedFinal = finalTranscript.trim();
+        console.log('Final Recognized Speech:', trimmedFinal);
+        stopRecording();
+        processSmartVoice(trimmedFinal);
+      }
     };
 
-  recognition.onerror = (event) => {
-    console.error("Speech recognition error event details:", event.error, event);
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error event details:", event.error, event);
 
-    if (event.error === 'network') {
-      console.warn("Speech recognition error details: network");
-      if (!hasRetriedOnNetworkError) {
-        hasRetriedOnNetworkError = true;
+      if (event.error === 'network') {
+        if (!hasRetriedOnNetworkError) {
+          hasRetriedOnNetworkError = true;
+          isRetryingSpeech = true;
+          showArabicToast("فشل الاتصال بالصوت. جاري المحاولة تلقائياً بعد قليل...", "info");
+
+          setTimeout(() => {
+            if (isRecording) {
+              try {
+                recognition.start();
+              } catch (e) {
+                console.error("Speech recognition retry start failed:", e);
+                showArabicToast("فشل في إعادة المحاولة: " + e.message, "error");
+                stopRecording();
+              }
+            }
+          }, 600);
+          return;
+        }
+      } else if (event.error === 'no-speech') {
         isRetryingSpeech = true;
-        console.log("Attempting automatic retry to start speech recognition...");
-        showArabicToast("فشل الاتصال بالصوت. جاري المحاولة تلقائياً بعد قليل...", "info");
-
         setTimeout(() => {
           if (isRecording) {
             try {
               recognition.start();
             } catch (e) {
-              console.error("Speech recognition retry start failed:", e);
-              showArabicToast("فشل في إعادة المحاولة: " + e.message, "error");
-              stopRecording();
+              console.error("Speech recognition restart after no-speech failed:", e);
             }
           }
-        }, 600);
+        }, 100);
         return;
       }
-    } else if (event.error === 'no-speech') {
-      console.warn("Speech recognition error details: no-speech (no voice detected). Keeping mic active...");
-      isRetryingSpeech = true;
-      setTimeout(() => {
-        if (isRecording) {
-          try {
-            recognition.start();
-          } catch (e) {
-            console.error("Speech recognition restart after no-speech failed:", e);
-          }
+
+      showArabicToast("فشل في التقاط الصوت: " + event.error, "error");
+      stopRecording();
+    };
+
+    recognition.onend = () => {
+      if (isRetryingSpeech) {
+        isRetryingSpeech = false;
+        return;
+      }
+      if (isRecording) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.error("Speech recognition restart inside onend failed:", e);
+          stopRecording();
         }
-      }, 100);
-      return;
-    }
-
-    showArabicToast("فشل في التقاط الصوت: " + event.error, "error");
-    stopRecording();
-  };
-
-  recognition.onend = () => {
-    if (isRetryingSpeech) {
-      isRetryingSpeech = false;
-      return;
-    }
-    // Keep persistent listening active if the user hasn't explicitly stopped
-    if (isRecording) {
-      console.log("Speech recognition ended unexpectedly while isRecording is true. Restarting...");
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error("Speech recognition restart inside onend failed:", e);
+      } else {
         stopRecording();
       }
-    } else {
-      stopRecording();
-    }
-  };
-} catch (error) {
-  console.error("Speech recognition initialization failed:", error);
-  showArabicToast("فشل تهيئة التعرف على الصوت", "error");
-}
+    };
+  } catch (error) {
+    console.error("Speech recognition initialization failed:", error);
+    showArabicToast("فشل تهيئة التعرف على الصوت", "error");
+  }
 };
 
 const startRecording = async () => {
@@ -4002,12 +3977,12 @@ const startRecording = async () => {
     initSpeechRecognition();
   }
 
-  // Add 500ms delay to allow device streams to synchronize before recognition start
   if (aiMicBtnText) aiMicBtnText.textContent = 'جاري تهيئة الميكروفون...';
   await new Promise(resolve => setTimeout(resolve, 500));
 
   if (recognition) {
     try {
+      createLiveSpeechOverlay();
       recognition.start();
     } catch (e) {
       console.error("Speech recognition start failed:", e);
@@ -4021,6 +3996,7 @@ const startRecording = async () => {
 
 const stopRecording = () => {
   isRecording = false;
+  destroyLiveSpeechOverlay();
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
   if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
   if (aiMicBtn) {
@@ -4087,15 +4063,13 @@ const executeAiCommand = async () => {
     console.log("AI analysis response result:", result);
     
     if (result.status === "error") {
-      await showCustomAlert("خطأ من السيرفر: " + result.message);
+      alert(result.message);
       return;
     }
 
     if (result.status === "success" && result.aiData) {
       const aiData = result.aiData;
       
-      // Client-side scanning fallback:
-      // Scan local inventory names against transcription text; default quantity to 1 if the item name is present in transcription but absent from the backend parsed aiData.items.
       if (!aiData.items) aiData.items = [];
       inventory.forEach(prod => {
         if (text.toLowerCase().includes(prod.name.toLowerCase())) {
@@ -4185,19 +4159,18 @@ const executeAiCommand = async () => {
       openCheckoutModal(true);
       showArabicToast("تم ملء الفاتورة بواسطة الذكاء الاصطناعي بنجاح!", "success");
     } else {
-      await showCustomAlert("فشل في تحليل النص: استجابة غير معروفة");
+      alert("فشل في تحليل النص: استجابة غير معروفة");
     }
   } catch (err) {
     console.error("AI assistant network/fetch error details:", err);
     showArabicToast("فشل الاتصال بمساعد الذكاء الاصطناعي: " + err.message, "error");
-    await showCustomAlert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
+    alert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
   } finally {
     if (aiLoadingState) aiLoadingState.classList.add('hidden');
     if (aiExecuteBtn) aiExecuteBtn.disabled = false;
   }
 };
 
-// Bind listeners
 if (smartAiBtn) smartAiBtn.addEventListener('click', openSmartAiModal);
 if (salesMicBtn) salesMicBtn.addEventListener('click', toggleRecording);
 if (checkoutQuickCustomerBtn) {
@@ -4207,7 +4180,6 @@ if (smartAiClose) smartAiClose.addEventListener('click', closeSmartAiModal);
 if (aiMicBtn) aiMicBtn.addEventListener('click', toggleRecording);
 if (aiExecuteBtn) aiExecuteBtn.addEventListener('click', executeAiCommand);
 
-// Checkout modal back button listener
 const checkoutBackBtn = document.getElementById('checkout-back-btn');
 if (checkoutBackBtn) {
   checkoutBackBtn.addEventListener('click', () => {
@@ -4215,7 +4187,6 @@ if (checkoutBackBtn) {
   });
 }
 
-// Add Product form Unit chips selector bindings
 const pUnitInput = document.getElementById('p-unit');
 const chipPacket = document.getElementById('p-unit-chip-packet');
 const chipCarton = document.getElementById('p-unit-chip-carton');
@@ -4305,7 +4276,7 @@ const renderCustomCustomerDropdownItems = () => {
     const div = document.createElement('div');
     div.className = `px-4.5 py-2.5 text-xs text-gray-800 font-semibold text-right hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-50/50 last:border-b-0 flex justify-between items-center ${checkoutCustomerSelect.value == c.id ? 'bg-[#1e5631]/5 text-[#1e5631] font-black' : ''}`;
     div.innerHTML = `
-      <span>${c.name} <span class="text-[9px] text-gray-400 font-bold mr-1">(${c.address})</span></span>
+      <span>${c.name} <span class="text-[9px] text-gray-455 font-bold mr-1">(${c.address})</span></span>
       ${checkoutCustomerSelect.value == c.id ? '<i class="fa-solid fa-circle-check text-[10px] text-[#1e5631]"></i>' : ''}
     `;
     
@@ -4331,7 +4302,7 @@ const selectCustomerInDropdown = (customerId) => {
 // --- IN-FORM BARCODE SCANNER BINDINGS ---
 const pBarcodeScanBtn = document.getElementById('p-barcode-scan-btn');
 const editPBarcodeScanBtn = document.getElementById('edit-p-barcode-scan-btn');
-let scannerTarget = 'cart'; // 'cart', 'addProductBarcode', or 'editProductBarcode'
+let scannerTarget = 'cart';
 
 if (pBarcodeScanBtn) {
   pBarcodeScanBtn.addEventListener('click', () => {
@@ -4359,7 +4330,6 @@ const startCameraScanner = () => {
     let cameraConfig = { facingMode: "environment" };
     
     if (devices && devices.length > 0) {
-      // Prioritize primary rear camera lens device id
       const rearCam = devices.find(d => 
         d.label.toLowerCase().includes('back') || 
         d.label.toLowerCase().includes('rear') || 
@@ -4374,12 +4344,12 @@ const startCameraScanner = () => {
     html5Qrcode.start(
       cameraConfig,
       {
-        fps: 30, // scan at high frame rate
+        fps: 30,
         qrbox: (width, height) => {
           const size = Math.min(width, height) * 0.7;
           return { width: size, height: size };
         },
-        aspectRatio: 1.777778, // widescreen mode
+        aspectRatio: 1.777778,
         videoConstraints: {
           facingMode: "environment",
           width: { min: 1280, ideal: 1920, max: 1920 },
@@ -4390,7 +4360,6 @@ const startCameraScanner = () => {
       onCameraScanFailure
     ).catch(err => {
       console.error("Error starting Html5Qrcode:", err);
-      // Direct environment fallback
       html5Qrcode.start(
         { facingMode: "environment" },
         {
@@ -4410,7 +4379,6 @@ const startCameraScanner = () => {
     });
   }).catch(err => {
     console.error("Error listing cameras:", err);
-    // Direct environment fallback if getCameras fails
     html5Qrcode = new Html5Qrcode("reader");
     html5Qrcode.start(
       { facingMode: "environment" },
@@ -4467,7 +4435,7 @@ const playBeep = () => {
       gainNode.connect(audioCtx.destination);
       
       oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); // 800Hz beep tone
+      oscillator.frequency.setValueAtTime(800, audioCtx.currentTime);
       
       gainNode.gain.setValueAtTime(0.0, audioCtx.currentTime);
       gainNode.gain.linearRampToValueAtTime(0.1, audioCtx.currentTime + 0.01);
@@ -4499,11 +4467,7 @@ const updateThemeIcon = () => {
 
 const onCameraScanSuccess = (decodedText, decodedResult) => {
   console.log(`Barcode scanned successfully: ${decodedText}`, decodedResult);
-  
-  // Play synthetic beep and haptic feedback
   playBeep();
-  
-  // Immediately stop the scanner
   stopCameraScanner();
 
   if (scannerTarget === 'addProductBarcode') {
@@ -4519,7 +4483,6 @@ const onCameraScanSuccess = (decodedText, decodedResult) => {
       showArabicToast("تم قراءة الباركود بنجاح", "success");
     }
   } else {
-    // Search the local products array for a product barcode match
     const matchedProduct = products.find(p => String(p.barcode || '').trim() === String(decodedText || '').trim());
     if (matchedProduct) {
       if (matchedProduct.quantity > 0) {
@@ -4534,11 +4497,8 @@ const onCameraScanSuccess = (decodedText, decodedResult) => {
   }
 };
 
-const onCameraScanFailure = (error) => {
-  // Silent scan failure callback
-};
+const onCameraScanFailure = (error) => {};
 
-// Bind scanner and local search listeners
 if (salesScanBtn) salesScanBtn.addEventListener('click', () => {
   scannerTarget = 'cart';
   startCameraScanner();
@@ -4571,7 +4531,6 @@ const handleLogin = async () => {
       throw new Error('الرجاء إدخال اسم المستخدم وكلمة المرور');
     }
 
-    // Set button loading state
     if (loginSubmitBtn) {
       loginSubmitBtn.disabled = true;
       loginSubmitBtn.textContent = 'جاري التحقق...';
@@ -4579,7 +4538,6 @@ const handleLogin = async () => {
 
     let fetchError = null;
     try {
-      // Restore fetch request to verify credentials against backend
       await loadInitialData(true, username, password);
     } catch (err) {
       console.warn("Failed to fetch fresh users from backend, falling back to local cache:", err);
@@ -4601,13 +4559,12 @@ const handleLogin = async () => {
 
       showArabicToast(`أهلاً بك، ${activeUser['اسم المستخدم']}`, 'success');
 
-      applyRBACRules(); // Apply RBAC rules on successful login
+      applyRBACRules();
 
       renderInventoryList();
       renderCustomersList();
       renderSalesGrid();
 
-      // Silently fetch latest data in background to refresh views (SWR)
       loadInitialData(true).catch(() => {});
     } else {
       if (fetchError && users.length === 0) {
@@ -4620,7 +4577,6 @@ const handleLogin = async () => {
     console.error("Login Error:", error);
     showArabicToast(error.message, 'error');
   } finally {
-    // Restore button state
     if (loginSubmitBtn) {
       loginSubmitBtn.disabled = false;
       loginSubmitBtn.textContent = 'دخول';
@@ -4628,7 +4584,6 @@ const handleLogin = async () => {
   }
 };
 
-// Bind login triggers
 if (loginSubmitBtn) loginSubmitBtn.addEventListener('click', handleLogin);
 if (loginUsernameInput) {
   loginUsernameInput.addEventListener('keypress', (e) => {
@@ -4641,7 +4596,6 @@ if (loginPasswordInput) {
   });
 }
 
-// Bind Logout buttons
 const performLogout = () => {
   localStorage.removeItem('activeUser');
   document.documentElement.classList.remove('user-logged-in');
@@ -4661,9 +4615,18 @@ if (headerLogoutBtn) {
   headerLogoutBtn.addEventListener('click', performLogout);
 }
 
+// --- VISIBILITY CHANGE & GLOBAL LISTENERS ---
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
+    if (activeView === 'sales') {
+      autoSelectNearestCustomer();
+    }
+  }
+});
+
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
-  // Check active user session first
   const storedUser = localStorage.getItem('activeUser');
   if (storedUser) {
     try {
@@ -4683,29 +4646,22 @@ const initApp = () => {
     if (loginContainer) loginContainer.style.display = 'flex';
     if (appContainer) appContainer.style.display = 'none';
   }
-  // Sync the dark mode toggle icon state on start
   updateThemeIcon();
 
-  // 1. Instantly load states from local cache (0ms delay UI)
   loadStatesFromLocalStorage();
   
-  // 2. Render initial view grids immediately
   renderInventoryList();
   renderCustomersList();
   renderSalesGrid();
 
-  // Start on Sales View
   switchView('sales');
   updateCartBadge();
 
   if (activeUser) {
-    applyRBACRules(); // Apply RBAC rules immediately on restore
+    applyRBACRules();
   }
 
-  // 3. Fetch latest data in the background silently
   loadInitialData(true).catch(() => {});
-  
-  // 4. Trigger sync for any pending offline items
   processSyncQueue();
 };
 
@@ -4714,4 +4670,3 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
-
