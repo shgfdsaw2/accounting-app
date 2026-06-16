@@ -323,10 +323,10 @@ const getHaversineDistanceInMeters = (coords1, coords2) => {
 
 const parseGpsCoords = (gpsStr) => {
   if (!gpsStr) return null;
-  const parts = gpsStr.split(',');
+  const parts = String(gpsStr).split(',');
   if (parts.length !== 2) return null;
-  const lat = parseFloat(parts[0]);
-  const lon = parseFloat(parts[1]);
+  const lat = parseFloat(parts[0].trim());
+  const lon = parseFloat(parts[1].trim());
   if (isNaN(lat) || isNaN(lon)) return null;
   return [lat, lon];
 };
@@ -341,7 +341,19 @@ const autoSelectNearestCustomer = async () => {
     let minDistance = Infinity;
 
     customers.forEach(cust => {
-      const custCoords = parseGpsCoords(cust.gps);
+      // Support both separate Latitude/Longitude properties or a combined gps string
+      let custCoords = null;
+      if (cust.Latitude !== undefined && cust.Longitude !== undefined) {
+        const lat = parseFloat(String(cust.Latitude).trim());
+        const lon = parseFloat(String(cust.Longitude).trim());
+        if (!isNaN(lat) && !isNaN(lon)) {
+          custCoords = [lat, lon];
+        }
+      }
+      if (!custCoords && cust.gps) {
+        custCoords = parseGpsCoords(cust.gps);
+      }
+
       if (custCoords) {
         const dist = getHaversineDistanceInMeters(userCoords, custCoords);
         if (dist < minDistance) {
@@ -636,7 +648,6 @@ const switchView = (targetViewKey) => {
       // Context-aware view rendering on entry
       if (key === 'sales') {
         renderSalesGrid();
-        autoSelectNearestCustomer(); // Automatically auto-select nearest customer
       } else if (key === 'customers') {
         renderCustomersList();
       } else if (key === 'inventory') {
@@ -867,12 +878,7 @@ const loadInitialData = (isSilent = false, username = '', password = '') => {
       renderCustomersList();
       renderInventoryList();
 
-      // Auto-select nearest customer if we are currently on the sales page and have loaded data
-      const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
-      if (activeView === 'sales') {
-        autoSelectNearestCustomer();
-      }
-    })
+      })
     .catch(err => {
       console.warn("Background fetch sync failed:", err);
       isLoading = false;
@@ -936,9 +942,9 @@ const renderSalesGrid = () => {
     const cartItem = cart.find(c => c.productId === prod.id);
     const cartQty = cartItem ? cartItem.qty : 0;
 
-    let qtyClass = 'text-gray-550';
-    if (prod.quantity === 0) qtyClass = 'text-red-550 font-extrabold';
-    else if (prod.quantity < 5) qtyClass = 'text-amber-550 font-extrabold';
+    let qtyClass = 'text-gray-500';
+    if (prod.quantity === 0) qtyClass = 'text-red-500 font-extrabold';
+    else if (prod.quantity < 5) qtyClass = 'text-amber-500 font-extrabold';
 
     const { cartonPrice, unitPrice } = getProductPrices(prod);
     card.innerHTML = `
@@ -946,7 +952,7 @@ const renderSalesGrid = () => {
         <h4 class="text-xs font-extrabold text-gray-900 line-clamp-2 min-h-[32px]">${prod.name}</h4>
         <div class="mt-2 space-y-1">
           <div class="flex justify-between text-[10px]">
-            <span class="text-gray-404">سعر الكارتون:</span>
+            <span class="text-gray-400">سعر الكارتون:</span>
             <span class="font-extrabold text-[#1e5631]">${cartonPrice.toLocaleString()} د.ع</span>
           </div>
           <div class="flex justify-between text-[10px]">
@@ -1075,7 +1081,7 @@ const renderSalesHistory = () => {
       lastDateLabel = dateLabel;
       
       const headerDiv = document.createElement('div');
-      headerDiv.className = 'sticky top-0 z-20 bg-gray-50 dark:bg-[#222222] py-2 px-3.5 text-[10px] font-black text-gray-500 dark:text-gray-400 border-b border-gray-250 dark:border-gray-150 select-none shadow-sm rounded-xl mt-4';
+      headerDiv.className = 'sticky top-0 z-20 bg-gray-50 dark:bg-[#222222] py-2 px-3.5 text-[10px] font-black text-gray-500 dark:text-gray-400 border-b border-gray-150 dark:border-gray-150 select-none shadow-sm rounded-xl mt-4';
       headerDiv.innerHTML = `<i class="fa-solid fa-calendar-day ml-1.5 text-[#1e5631] dark:text-yellow-300"></i> ${dateLabel}`;
       salesHistoryList.appendChild(headerDiv);
     }
@@ -1086,7 +1092,7 @@ const renderSalesHistory = () => {
     let badgeClass = '';
     if (sale.status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
     else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100';
-    else badgeClass = 'bg-red-50 text-red-700 border-red-155';
+    else badgeClass = 'bg-red-50 text-red-700 border-red-100';
 
     row.innerHTML = `
       <div class="space-y-1">
@@ -1100,7 +1106,7 @@ const renderSalesHistory = () => {
         <span class="text-xs font-black text-[#1e5631] bg-[#e8ecea] px-3 py-1 rounded-lg">
           ${sale.totalAmount.toLocaleString()} د.ع
         </span>
-        <button class="btn-print-invoice-action w-7 h-7 rounded-lg bg-white text-gray-505 hover:text-gray-800 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors" title="🖨️ طباعة">
+        <button class="btn-print-invoice-action w-7 h-7 rounded-lg bg-white text-gray-500 hover:text-gray-800 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors" title="🖨️ طباعة">
           <i class="fa-solid fa-print text-[10px]"></i>
         </button>
         <button class="btn-whatsapp-invoice-action w-7 h-7 rounded-lg bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 flex items-center justify-center cursor-pointer transition-colors" title="💬 واتساب">
@@ -1345,7 +1351,7 @@ const renderCustomerLedgerView = (customer) => {
 
     Object.keys(groups).forEach(dateStr => {
       const headerDiv = document.createElement('div');
-      headerDiv.className = 'sticky top-0 bg-white dark:bg-[#1e1e1e] py-2 px-1 border-b border-gray-100 dark:border-gray-150 text-[10px] font-black text-gray-400 dark:text-gray-505 z-10 select-none';
+      headerDiv.className = 'sticky top-0 bg-white dark:bg-[#1e1e1e] py-2 px-1 border-b border-gray-100 dark:border-gray-150 text-[10px] font-black text-gray-400 dark:text-gray-500 z-10 select-none';
       headerDiv.innerHTML = '<span>' + getArabicDateLabel(dateStr) + '</span>';
       profileLedgerList.appendChild(headerDiv);
 
@@ -1380,10 +1386,10 @@ const renderCustomerLedgerView = (customer) => {
               ${changePrefix}${sale.totalAmount.toLocaleString()} د.ع
             </span>
           `;
-          row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-250 flex justify-between items-center select-none mb-2';
+          row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-150 flex justify-between items-center select-none mb-2';
         } else {
           if (sale.status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900';
-          else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/20 dark:text-amber-404 dark:border-emerald-900';
+          else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-955/20 dark:text-amber-400 dark:border-emerald-900';
           else badgeClass = 'bg-red-50 text-red-700 border-red-100 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900';
           
           row.innerHTML = `
@@ -1392,13 +1398,13 @@ const renderCustomerLedgerView = (customer) => {
                 <span class="text-[10px] font-extrabold text-gray-800 dark:text-gray-200">${titleText}</span>
                 <span class="text-[9px] px-2 py-0.5 rounded-full border ${badgeClass} font-black">${sale.status}</span>
               </div>
-              <span class="text-[9px] text-gray-400 dark:text-gray-500 font-bold block">🕒 ${timeStr}</span>
+              <span class="text-[9px] text-gray-400 dark:text-gray-505 font-bold block">🕒 ${timeStr}</span>
             </div>
             <span class="text-[10px] font-black ${amountClass} px-3 py-1 rounded-lg">
               ${changePrefix}${sale.totalAmount.toLocaleString()} د.ع
             </span>
           `;
-          row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-250 flex justify-between items-center cursor-pointer hover:border-gray-200 dark:hover:border-[#2d2d2d] transition-all active:scale-[0.98] mb-2';
+          row.className = 'bg-[#f4f6f5] dark:bg-[#222222] p-3.5 rounded-xl border border-gray-100 dark:border-gray-150 flex justify-between items-center cursor-pointer hover:border-gray-200 dark:hover:border-[#2d2d2d] transition-all active:scale-[0.98] mb-2';
 
           // Bind Touch Swipe Gestures
           let startX = 0;
@@ -1602,13 +1608,13 @@ const renderCustomersList = () => {
       </div>
 
       <div class="accordion-content hidden border-t border-gray-50 bg-[#f8f9fa] dark:bg-[#1a1a1a] p-4.5 space-y-3">
-        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-650 dark:text-gray-400 font-bold">
+        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-600 dark:text-gray-400 font-bold">
           <div class="flex items-center gap-1.5 truncate text-right">
-            <i class="fa-solid fa-map-location-dot text-gray-455 text-xs"></i>
+            <i class="fa-solid fa-map-location-dot text-gray-400 text-xs"></i>
             <span class="truncate">${c.address || 'لا يوجد عنوان'}</span>
           </div>
           <div class="flex items-center gap-1.5 text-right">
-            <i class="fa-solid fa-phone text-gray-450 text-xs"></i>
+            <i class="fa-solid fa-phone text-gray-400 text-xs"></i>
             <span>${c.phone || 'لا يوجد هاتف'}</span>
           </div>
         </div>
@@ -1770,10 +1776,10 @@ const renderInventoryList = () => {
           <span class="text-xs font-black text-[#1e5631] block">${p.quantity} ${p.unit}</span>
         </div>
         <div class="flex gap-2">
-          <button class="btn-edit-product w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-805 flex items-center justify-center cursor-pointer transition-colors" title="تعديل المنتج">
+          <button class="btn-edit-product w-8 h-8 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center cursor-pointer transition-colors" title="تعديل المنتج">
             <i class="fa-solid fa-pen text-[10px]"></i>
           </button>
-          <button class="btn-delete-product delete-btn w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-505 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors" title="حذف المنتج">
+          <button class="btn-delete-product delete-btn w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors" title="حذف المنتج">
             <i class="fa-solid fa-trash-can text-[10px]"></i>
           </button>
         </div>
@@ -1858,7 +1864,7 @@ const renderCartRows = () => {
     row.innerHTML = `
       <div class="space-y-1 flex-1 pr-1">
         <h4 class="text-xs font-extrabold text-gray-800">${prod.name}</h4>
-        <span class="text-[10px] text-gray-505 font-bold block">${prod.price.toLocaleString()} د.ع / ${prod.unit}</span>
+        <span class="text-[10px] text-gray-500 font-bold block">${prod.price.toLocaleString()} د.ع / ${prod.unit}</span>
       </div>
       <div class="flex items-center gap-2">
         <button onclick="adjustCartItemQty(${item.productId}, -1)" class="w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
@@ -2066,7 +2072,7 @@ const renderPurchaseCart = () => {
       </div>
       <div class="flex items-center gap-3">
         <span class="font-black text-[#1e5631]">${totalVal.toLocaleString()} د.ع</span>
-        <button class="text-red-450 hover:text-red-650 cursor-pointer" onclick="deleteFromPurchaseCart(${idx})">
+        <button class="text-red-500 hover:text-red-700 cursor-pointer" onclick="deleteFromPurchaseCart(${idx})">
           <i class="fa-solid fa-trash-can text-[9px]"></i>
         </button>
       </div>
@@ -2109,7 +2115,7 @@ const renderPurchaseHistory = () => {
   const sorted = [...purchases].sort((a, b) => b.id - a.id);
   sorted.forEach(pur => {
     const row = document.createElement('div');
-    row.className = 'bg-[#f4f6f5] p-3.5 rounded-xl border border-gray-100 flex justify-between items-center select-none cursor-pointer hover:border-gray-250 transition-all active:scale-[0.98]';
+    row.className = 'bg-[#f4f6f5] p-3.5 rounded-xl border border-gray-100 flex justify-between items-center select-none cursor-pointer hover:border-[#1e5631] transition-all active:scale-[0.98]';
     
     row.innerHTML = `
       <div class="space-y-1">
@@ -2344,7 +2350,7 @@ const renderReturnCart = () => {
       </div>
       <div class="flex items-center gap-3">
         <span class="font-black text-[#1e5631]">${totalVal.toLocaleString()} د.ع</span>
-        <button class="text-red-505 hover:text-red-700 cursor-pointer" onclick="deleteFromReturnCart(${idx})">
+        <button class="text-red-500 hover:text-red-700 cursor-pointer" onclick="deleteFromReturnCart(${idx})">
           <i class="fa-solid fa-trash-can text-[9px]"></i>
         </button>
       </div>
@@ -2704,7 +2710,12 @@ document.addEventListener('click', () => {
   }
 });
 
-if (navSales) navSales.addEventListener('click', () => switchView('sales'));
+if (navSales) {
+  navSales.addEventListener('click', () => {
+    switchView('sales');
+    autoSelectNearestCustomer();
+  });
+}
 if (navCustomers) navCustomers.addEventListener('click', () => switchView('customers'));
 if (navInventory) navInventory.addEventListener('click', () => switchView('inventory'));
 
@@ -3692,44 +3703,46 @@ let hasRetriedOnNetworkError = false;
 let liveSpeechOverlay = null;
 
 const createLiveSpeechOverlay = () => {
-  if (document.getElementById('live-speech-overlay')) return;
-  
-  liveSpeechOverlay = document.createElement('div');
-  liveSpeechOverlay.id = 'live-speech-overlay';
-  liveSpeechOverlay.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 w-11/12 max-w-sm bg-white/95 dark:bg-black/90 backdrop-blur-md border border-gray-250/50 dark:border-gray-800/80 p-4 rounded-2xl shadow-xl z-[999] flex flex-col items-center gap-3 transition-all duration-300 pointer-events-none opacity-0 translate-y-4';
-  
-  liveSpeechOverlay.innerHTML = `
-    <div class="flex items-center gap-2">
-      <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
-      <span class="text-[10px] font-black text-gray-500 dark:text-gray-400">مساعد الذكاء الاصطناعي يستمع...</span>
-    </div>
-    <p id="live-speech-text" class="text-xs font-bold text-gray-700 dark:text-gray-200 text-center leading-relaxed max-h-16 overflow-y-auto px-2 select-none">تحدث الآن...</p>
-  `;
-  
-  document.body.appendChild(liveSpeechOverlay);
-  
-  // Trigger entry animation
-  requestAnimationFrame(() => {
-    liveSpeechOverlay.classList.remove('opacity-0', 'translate-y-4');
-    liveSpeechOverlay.classList.add('opacity-100', 'translate-y-0');
-  });
+  let overlay = document.getElementById('live-speech-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'live-speech-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.bottom = '100px';
+    overlay.style.left = '50%';
+    overlay.style.transform = 'translateX(-50%)';
+    overlay.style.background = 'rgba(0, 0, 0, 0.85)';
+    overlay.style.color = '#fff';
+    overlay.style.padding = '12px 24px';
+    overlay.style.borderRadius = '25px';
+    overlay.style.zIndex = '99999';
+    overlay.style.textAlign = 'center';
+    overlay.style.fontSize = '14px';
+    overlay.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+    overlay.style.transition = 'opacity 0.3s ease';
+    overlay.style.pointerEvents = 'none';
+    document.body.appendChild(overlay);
+  }
+  overlay.textContent = 'تحدث الآن...';
+  overlay.style.display = 'block';
+  overlay.style.opacity = '1';
 };
 
 const updateLiveSpeechText = (text) => {
-  const textEl = document.getElementById('live-speech-text');
-  if (textEl && text.trim()) {
-    textEl.textContent = text;
+  const overlay = document.getElementById('live-speech-overlay');
+  if (overlay && text.trim()) {
+    overlay.textContent = text;
   }
 };
 
 const destroyLiveSpeechOverlay = () => {
-  const el = document.getElementById('live-speech-overlay');
-  if (el) {
-    el.classList.remove('opacity-100', 'translate-y-0');
-    el.classList.add('opacity-0', 'translate-y-4');
-    setTimeout(() => {
-      el.remove();
-    }, 300);
+  const overlay = document.getElementById('live-speech-overlay');
+  if (overlay) {
+    overlay.textContent = '';
+    overlay.style.display = 'none';
+    if (overlay.parentNode) {
+      overlay.parentNode.removeChild(overlay);
+    }
   }
 };
 
@@ -3749,7 +3762,7 @@ const processSmartVoice = async (transcript) => {
     console.log("Smart voice response result:", result);
     
     if (result.status === "error") {
-      alert(result.message);
+      alert("خطأ من السيرفر: " + result.message);
       return;
     }
 
@@ -3898,59 +3911,12 @@ const initSpeechRecognition = () => {
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error event details:", event.error, event);
-
-      if (event.error === 'network') {
-        if (!hasRetriedOnNetworkError) {
-          hasRetriedOnNetworkError = true;
-          isRetryingSpeech = true;
-          showArabicToast("فشل الاتصال بالصوت. جاري المحاولة تلقائياً بعد قليل...", "info");
-
-          setTimeout(() => {
-            if (isRecording) {
-              try {
-                recognition.start();
-              } catch (e) {
-                console.error("Speech recognition retry start failed:", e);
-                showArabicToast("فشل في إعادة المحاولة: " + e.message, "error");
-                stopRecording();
-              }
-            }
-          }, 600);
-          return;
-        }
-      } else if (event.error === 'no-speech') {
-        isRetryingSpeech = true;
-        setTimeout(() => {
-          if (isRecording) {
-            try {
-              recognition.start();
-            } catch (e) {
-              console.error("Speech recognition restart after no-speech failed:", e);
-            }
-          }
-        }, 100);
-        return;
-      }
-
       showArabicToast("فشل في التقاط الصوت: " + event.error, "error");
       stopRecording();
     };
 
     recognition.onend = () => {
-      if (isRetryingSpeech) {
-        isRetryingSpeech = false;
-        return;
-      }
-      if (isRecording) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.error("Speech recognition restart inside onend failed:", e);
-          stopRecording();
-        }
-      } else {
-        stopRecording();
-      }
+      stopRecording();
     };
   } catch (error) {
     console.error("Speech recognition initialization failed:", error);
@@ -3995,12 +3961,13 @@ const startRecording = async () => {
 };
 
 const stopRecording = () => {
+  if (!isRecording) return;
   isRecording = false;
   destroyLiveSpeechOverlay();
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
   if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
   if (aiMicBtn) {
-    aiMicBtn.classList.remove('bg-red-50', 'text-red-600', 'border-red-200', 'recording');
+    aiMicBtn.classList.remove('bg-red-50', 'text-red-650', 'border-red-200', 'recording');
   }
   if (salesMicBtn) {
     salesMicBtn.classList.remove('recording');
@@ -4063,7 +4030,7 @@ const executeAiCommand = async () => {
     console.log("AI analysis response result:", result);
     
     if (result.status === "error") {
-      alert(result.message);
+      alert("خطأ من السيرفر: " + result.message);
       return;
     }
 
@@ -4616,14 +4583,6 @@ if (headerLogoutBtn) {
 }
 
 // --- VISIBILITY CHANGE & GLOBAL LISTENERS ---
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    const activeView = Object.keys(views).find(key => !views[key].el.classList.contains('hidden'));
-    if (activeView === 'sales') {
-      autoSelectNearestCustomer();
-    }
-  }
-});
 
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
