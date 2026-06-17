@@ -28,6 +28,7 @@ let lastCompletedCustomer = null;
 let users = [];
 let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
+const APP_SECRET_TOKEN = "POS_AUTH_KEY_2026";
 
 // --- PRICE CALCULATION & VOICE INPUT HELPERS ---
 const getProductPrices = (prod) => {
@@ -254,12 +255,13 @@ const processSyncQueue = async () => {
   while (syncQueue.length > 0) {
     const item = syncQueue[0];
     try {
+      const bodyPayload = { ...item.payload, token: APP_SECRET_TOKEN };
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8'
         },
-        body: JSON.stringify(item.payload),
+        body: JSON.stringify(bodyPayload),
         redirect: 'follow'
       });
       
@@ -282,7 +284,46 @@ const processSyncQueue = async () => {
   isProcessingQueue = false;
 };
 
-window.addEventListener('online', processSyncQueue);
+const syncOfflineSales = async () => {
+  let offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
+  if (offlineSalesQueue.length === 0) return;
+
+  console.log(`Syncing offline sales queue... ${offlineSalesQueue.length} items.`);
+
+  const failedItems = [];
+
+  for (const salePayload of offlineSalesQueue) {
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({ ...salePayload, token: APP_SECRET_TOKEN }),
+        redirect: 'follow'
+      });
+
+      const resData = await response.json();
+      if (resData && resData.status === 'error') {
+        console.error("Server returned error for offline sale sync:", resData.message);
+        failedItems.push(salePayload);
+      }
+    } catch (err) {
+      console.error("Failed to sync offline sale item:", err);
+      failedItems.push(salePayload);
+    }
+  }
+
+  localStorage.setItem('offlineSalesQueue', JSON.stringify(failedItems));
+  if (failedItems.length === 0) {
+    showArabicToast("تم مزامنة جميع الفواتير المعلقة بنجاح!", "success");
+  }
+};
+
+window.addEventListener('online', () => {
+  processSyncQueue();
+  syncOfflineSales();
+});
 
 const getCurrentLocation = () => {
   return new Promise((resolve, reject) => {
@@ -705,8 +746,16 @@ const showArabicToast = (message, type = 'success') => {
 };
 
 // --- FETCH INITIAL DATA (GET) ---
-const loadInitialData = (isSilent = false, username = '', password = '') => {
+const fetchData = (isSilent = false, username = '', password = '') => {
+  // Immediately load and render from localStorage if available
+  loadStatesFromLocalStorage();
   const hasCachedData = inventory.length > 0 || customers.length > 0;
+  if (hasCachedData) {
+    renderSalesGrid();
+    renderCustomersList();
+    renderInventoryList();
+  }
+
   const runSilently = isSilent || hasCachedData;
 
   if (!runSilently) {
@@ -2713,7 +2762,6 @@ document.addEventListener('click', () => {
 if (navSales) {
   navSales.addEventListener('click', () => {
     switchView('sales');
-    autoSelectNearestCustomer();
   });
 }
 if (navCustomers) navCustomers.addEventListener('click', () => switchView('customers'));
@@ -3362,7 +3410,12 @@ if (customerForm) {
   });
 }
 
-if (cartCompleteSaleBtn) cartCompleteSaleBtn.addEventListener('click', openCheckoutModal);
+if (cartCompleteSaleBtn) {
+  cartCompleteSaleBtn.addEventListener('click', () => {
+    openCheckoutModal();
+    autoSelectNearestCustomer();
+  });
+}
 
 // CONFIRM CHECKOUT FORM
 if (checkoutConfirmBtn) {
@@ -3539,7 +3592,14 @@ if (checkoutConfirmBtn) {
       saveAllStatesToLocalStorage();
       openInvoiceOptionsModal(saleObject, customer);
 
-      addToSyncQueue(addSalePayload);
+      if (!navigator.onLine) {
+        let offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
+        offlineSalesQueue.push(addSalePayload);
+        localStorage.setItem('offlineSalesQueue', JSON.stringify(offlineSalesQueue));
+        alert("تم حفظ الفاتورة محلياً لعدم توفر إنترنت. ستتم المزامنة لاحقاً.");
+      } else {
+        addToSyncQueue(addSalePayload);
+      }
 
     } catch (error) {
       console.error("Critical error in checkout confirm handler:", error);
@@ -3629,7 +3689,7 @@ if (mainContainer && pullIndicator) {
       pullIndicator.style.height = '48px';
       pullIndicator.style.opacity = '1';
 
-      loadInitialData(true).catch(() => {}).finally(() => {
+      fetchData(true).catch(() => {}).finally(() => {
         pullIndicator.style.height = '0px';
         pullIndicator.style.opacity = '0';
       });
@@ -3645,7 +3705,7 @@ if (mainContainer && pullIndicator) {
 
 // Auto-Sync Background Task (Every 1 minute)
 setInterval(() => {
-  loadInitialData(true).catch(() => {});
+  fetchData(true).catch(() => {});
 }, 60000);
 
 // --- QUICK CUSTOMER ADDITION FLOW ---
@@ -3754,7 +3814,7 @@ const processSmartVoice = async (transcript) => {
       headers: {
         'Content-Type': 'text/plain;charset=utf-8'
       },
-      body: JSON.stringify({ action: 'smart_voice', text: transcript }),
+      body: JSON.stringify({ action: 'smart_voice', text: transcript, token: APP_SECRET_TOKEN }),
       redirect: 'follow'
     });
     
@@ -4009,7 +4069,8 @@ const executeAiCommand = async () => {
 
   const payload = {
     action: "analyzeText",
-    text: text
+    text: text,
+    token: APP_SECRET_TOKEN
   };
 
   try {
@@ -4505,7 +4566,7 @@ const handleLogin = async () => {
 
     let fetchError = null;
     try {
-      await loadInitialData(true, username, password);
+      await fetchData(true, username, password);
     } catch (err) {
       console.warn("Failed to fetch fresh users from backend, falling back to local cache:", err);
       fetchError = err;
@@ -4532,7 +4593,7 @@ const handleLogin = async () => {
       renderCustomersList();
       renderSalesGrid();
 
-      loadInitialData(true).catch(() => {});
+      fetchData(true).catch(() => {});
     } else {
       if (fetchError && users.length === 0) {
         throw new Error('تعذر الاتصال بالسيرفر للتحقق من الحساب (لا توجد بيانات محلية)!');
@@ -4620,8 +4681,11 @@ const initApp = () => {
     applyRBACRules();
   }
 
-  loadInitialData(true).catch(() => {});
+  fetchData(true).catch(() => {});
   processSyncQueue();
+  if (navigator.onLine) {
+    syncOfflineSales();
+  }
 };
 
 if (document.readyState === 'loading') {
