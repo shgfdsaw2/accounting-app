@@ -53,6 +53,8 @@ self.addEventListener('fetch', event => {
   // Avoid caching POST requests, external browser extensions, or Google Sheets API scripts
   if (event.request.method !== 'GET' || 
       event.request.url.includes('script.google.com') ||
+      event.request.url.includes('script.googleusercontent.com') ||
+      event.request.url.includes('/exec') ||
       !event.request.url.startsWith('http')) {
     return;
   }

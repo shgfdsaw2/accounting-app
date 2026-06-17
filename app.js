@@ -285,8 +285,15 @@ const processSyncQueue = async () => {
 };
 
 const syncOfflineSales = async () => {
-  let offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
-  if (offlineSalesQueue.length === 0) return;
+  let offlineSalesQueue = [];
+  try {
+    offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
+  } catch (e) {
+    console.error("Failed to parse offlineSalesQueue from localStorage:", e);
+    offlineSalesQueue = [];
+    localStorage.setItem('offlineSalesQueue', '[]');
+  }
+  if (!Array.isArray(offlineSalesQueue) || offlineSalesQueue.length === 0) return;
 
   console.log(`Syncing offline sales queue... ${offlineSalesQueue.length} items.`);
 
@@ -304,8 +311,10 @@ const syncOfflineSales = async () => {
       });
 
       const resData = await response.json();
-      if (resData && resData.status === 'error') {
-        console.error("Server returned error for offline sale sync:", resData.message);
+      if (resData && resData.status === 'success') {
+        console.log("Offline sale synced successfully:", salePayload.invoiceId);
+      } else {
+        console.error("Server returned error or invalid status for offline sale sync:", resData ? resData.message : "No response");
         failedItems.push(salePayload);
       }
     } catch (err) {
@@ -926,6 +935,9 @@ const fetchData = (isSilent = false, username = '', password = '') => {
       renderSalesGrid();
       renderCustomersList();
       renderInventoryList();
+      if (typeof populateCheckoutCustomerDropdown === 'function') {
+        populateCheckoutCustomerDropdown();
+      }
 
       })
     .catch(err => {
@@ -945,6 +957,7 @@ const fetchData = (isSilent = false, username = '', password = '') => {
 
 // --- RENDER COMPONENT: SALES POS GRID ---
 const renderSalesGrid = () => {
+  if (!salesProductsGrid) return;
   if (isLoading && inventory.length === 0) {
     salesProductsGrid.innerHTML = `
       <div class="col-span-2 text-center py-12">
@@ -1587,6 +1600,7 @@ const closeCustomerProfileModal = () => {
 
 // --- RENDER COMPONENT: CUSTOMER DIRECTORY ---
 const renderCustomersList = () => {
+  if (!customersList) return;
   if (isLoading && customers.length === 0) {
     customersList.innerHTML = `
       <div class="text-center py-12">
@@ -1761,6 +1775,7 @@ const renderCustomersList = () => {
 
 // --- RENDER COMPONENT: INVENTORY STOCKS ---
 const renderInventoryList = () => {
+  if (!inventoryList) return;
   const totalQty = products.reduce((sum, p) => sum + (parseInt(p.quantity) || 0), 0);
   const countEl = document.getElementById('total-inventory-count');
   if (countEl) countEl.innerText = "إجمالي الكراتين في المخزن: " + totalQty;
@@ -2633,30 +2648,8 @@ const closeCartDrawer = () => {
 };
 
 // --- CHECKOUT PROCESS MODAL ---
-const openCheckoutModal = (keepQuickAddCustomerState = false) => {
-  closeCartDrawer();
-  if (keepQuickAddCustomerState !== true) {
-    toggleQuickCustomerMode(false);
-  }
-  
-  let sum = 0;
-  cart.forEach(item => {
-    const prod = inventory.find(p => p.id === item.productId);
-    if (prod) sum += prod.price * item.qty;
-  });
-
-  checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
-  checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
-  
-  checkoutDiscount.value = '';
-  if (checkoutSavings) checkoutSavings.value = '';
-  checkoutReceivedInput.value = '';
-  
-  updateCheckoutDebtBadge(sum, 0);
-
-  const now = new Date();
-  checkoutDateInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-
+const populateCheckoutCustomerDropdown = () => {
+  if (!checkoutCustomerSelect) return;
   const currentSelectedValue = checkoutCustomerSelect.value;
   checkoutCustomerSelect.innerHTML = '';
   customers.forEach(c => {
@@ -2684,6 +2677,37 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     }
   }
 
+  if (customCustomerDropdownItems && customCustomerDropdownMenu && !customCustomerDropdownMenu.classList.contains('hidden')) {
+    renderCustomCustomerDropdownItems();
+  }
+};
+
+const openCheckoutModal = (keepQuickAddCustomerState = false) => {
+  closeCartDrawer();
+  if (keepQuickAddCustomerState !== true) {
+    toggleQuickCustomerMode(false);
+  }
+  
+  let sum = 0;
+  cart.forEach(item => {
+    const prod = inventory.find(p => p.id === item.productId);
+    if (prod) sum += prod.price * item.qty;
+  });
+
+  checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
+  checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
+  
+  checkoutDiscount.value = '';
+  if (checkoutSavings) checkoutSavings.value = '';
+  checkoutReceivedInput.value = '';
+  
+  updateCheckoutDebtBadge(sum, 0);
+
+  const now = new Date();
+  checkoutDateInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+
+  populateCheckoutCustomerDropdown();
+
   if (customCustomerDropdownMenu) {
     customCustomerDropdownMenu.classList.add('hidden');
   }
@@ -2693,6 +2717,80 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     checkoutModal.classList.remove('modal-hidden');
     checkoutModal.classList.add('modal-visible');
   }, 20);
+
+  // Automatically trigger geolocation silent check and select the nearest customer if within proximity (e.g. < 100 meters)
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLat = position.coords.latitude;
+        const userLon = position.coords.longitude;
+        
+        let cachedCusts = [];
+        try {
+          cachedCusts = JSON.parse(localStorage.getItem('customers') || '[]');
+        } catch (e) {
+          console.error("Failed to parse customers from localStorage:", e);
+        }
+        if (!Array.isArray(cachedCusts) || cachedCusts.length === 0) {
+          cachedCusts = customers || [];
+        }
+
+        let nearestCustomer = null;
+        let minDistance = Infinity;
+
+        cachedCusts.forEach(cust => {
+          let custCoords = null;
+          if (cust.Latitude !== undefined && cust.Longitude !== undefined) {
+            const lat = parseFloat(String(cust.Latitude).trim());
+            const lon = parseFloat(String(cust.Longitude).trim());
+            if (!isNaN(lat) && !isNaN(lon)) {
+              custCoords = [lat, lon];
+            }
+          }
+          if (!custCoords && cust.gps) {
+            custCoords = parseGpsCoords(cust.gps);
+          }
+
+          if (custCoords) {
+            const dist = getHaversineDistanceInMeters([userLat, userLon], custCoords);
+            if (dist < minDistance) {
+              minDistance = dist;
+              nearestCustomer = cust;
+            }
+          }
+        });
+
+        // Set proximity threshold to 100 meters
+        if (nearestCustomer && minDistance <= 100) {
+          if (checkoutCustomerSelect) {
+            let valueToSet = nearestCustomer.id;
+            for (let i = 0; i < checkoutCustomerSelect.options.length; i++) {
+              const opt = checkoutCustomerSelect.options[i];
+              if (opt.value == nearestCustomer.id) {
+                valueToSet = nearestCustomer.id;
+                break;
+              } else if (opt.value === nearestCustomer.name) {
+                valueToSet = nearestCustomer.name;
+                break;
+              } else if (opt.textContent.includes(nearestCustomer.name)) {
+                valueToSet = opt.value;
+                break;
+              }
+            }
+            checkoutCustomerSelect.value = valueToSet;
+            checkoutCustomerSelect.dispatchEvent(new Event('change'));
+          }
+          selectCustomerInDropdown(nearestCustomer.id);
+          console.log(`Auto-selected nearest customer: ${nearestCustomer.name} (${minDistance.toFixed(1)} meters away)`);
+          showArabicToast(`تم تحديد العميل الأقرب تلقائياً: ${nearestCustomer.name} (${minDistance.toFixed(0)} متر)`, 'success');
+        }
+      },
+      (error) => {
+        console.warn("Silent geolocation fetch failed:", error);
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  }
 };
 
 const closeCheckoutModal = () => {
@@ -3807,6 +3905,8 @@ const destroyLiveSpeechOverlay = () => {
 };
 
 const processSmartVoice = async (transcript) => {
+  const sanitizedText = String(transcript).trim().replace(/\s+/g, ' ');
+  if (!sanitizedText) return;
   showArabicToast('جاري تحليل الصوت بذكاء...', 'info');
   try {
     const response = await fetch(BACKEND_URL, {
@@ -3814,7 +3914,11 @@ const processSmartVoice = async (transcript) => {
       headers: {
         'Content-Type': 'text/plain;charset=utf-8'
       },
-      body: JSON.stringify({ action: 'smart_voice', text: transcript, token: APP_SECRET_TOKEN }),
+      body: JSON.stringify({
+        action: 'smart_voice',
+        text: sanitizedText,
+        token: 'POS_AUTH_KEY_2026'
+      }),
       redirect: 'follow'
     });
     
@@ -3944,7 +4048,6 @@ const initSpeechRecognition = () => {
     recognition.onresult = (event) => {
       let finalTranscript = '';
       let interimTranscript = '';
-      let isFinal = false;
       
       for (let i = 0; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
@@ -3957,26 +4060,33 @@ const initSpeechRecognition = () => {
       const fullText = finalTranscript + interimTranscript;
       updateLiveSpeechText(fullText || '...');
 
-      if (event.results.length > 0 && event.results[event.results.length - 1].isFinal) {
-        isFinal = true;
-      }
-
-      if (isFinal && finalTranscript.trim()) {
-        const trimmedFinal = finalTranscript.trim();
-        console.log('Final Recognized Speech:', trimmedFinal);
-        stopRecording();
-        processSmartVoice(trimmedFinal);
+      if (event.results[0] && event.results[0].isFinal) {
+        const finalText = event.results[0][0].transcript.trim();
+        if (finalText) {
+          recognition.stop();
+          stopRecording();
+          processSmartVoice(finalText);
+        }
       }
     };
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error event details:", event.error, event);
-      showArabicToast("فشل في التقاط الصوت: " + event.error, "error");
       stopRecording();
+      alert("حدث خطأ في التعرف على الصوت: " + event.error);
     };
 
     recognition.onend = () => {
-      stopRecording();
+      if (isRecording) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.warn("Speech recognition restart failed:", e);
+          stopRecording();
+        }
+      } else {
+        stopRecording();
+      }
     };
   } catch (error) {
     console.error("Speech recognition initialization failed:", error);
