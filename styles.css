@@ -110,6 +110,8 @@ body {
 /* Expandable Accordion UI transitions */
 .accordion-arrow {
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 .accordion-content {
@@ -124,11 +126,11 @@ body {
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translate3d(0, 6px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -415,6 +417,9 @@ body {
   background-color: rgba(255, 255, 255, 0.95) !important;
   border: 1px solid rgba(229, 231, 235, 0.5) !important;
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.08), 0 8px 16px -6px rgba(0, 0, 0, 0.04) !important;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .dark #header-menu-dropdown {
@@ -457,6 +462,8 @@ body {
 
 .cart-pop {
   animation: cart-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 /* Search input mic adjustment */

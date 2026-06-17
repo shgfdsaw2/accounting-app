@@ -30,6 +30,15 @@ let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
 const APP_SECRET_TOKEN = "POS_AUTH_KEY_2026";
 
+// --- DEBOUNCE UTILITY ---
+const debounce = (func, delay) => {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => func.apply(this, args), delay);
+  };
+};
+
 // --- PRICE CALCULATION & VOICE INPUT HELPERS ---
 const getProductPrices = (prod) => {
   const isCarton = String(prod.unit || prod.category).trim() === 'كرتون';
@@ -391,21 +400,10 @@ const autoSelectNearestCustomer = async () => {
     let minDistance = Infinity;
 
     customers.forEach(cust => {
-      // Support both separate Latitude/Longitude properties or a combined gps string
-      let custCoords = null;
-      if (cust.Latitude !== undefined && cust.Longitude !== undefined) {
-        const lat = parseFloat(String(cust.Latitude).trim());
-        const lon = parseFloat(String(cust.Longitude).trim());
-        if (!isNaN(lat) && !isNaN(lon)) {
-          custCoords = [lat, lon];
-        }
-      }
-      if (!custCoords && cust.gps) {
-        custCoords = parseGpsCoords(cust.gps);
-      }
-
-      if (custCoords) {
-        const dist = getHaversineDistanceInMeters(userCoords, custCoords);
+      const lat = parseFloat(cust.Latitude);
+      const lon = parseFloat(cust.Longitude);
+      if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
+        const dist = getHaversineDistanceInMeters(userCoords, [lat, lon]);
         if (dist < minDistance) {
           minDistance = dist;
           nearestCustomer = cust;
@@ -825,7 +823,8 @@ const fetchData = (isSilent = false, username = '', password = '') => {
           address: item['العنوان'] || '',
           phone: String(item['رقم الهاتف'] || ''),
           debt: parseFloat(item['الديون']) || parseFloat(item['الدين']) || 0,
-          gps: item['الموقع'] || item['موقع'] || item['gps'] || ''
+          Latitude: parseFloat(item['Latitude']) || parseFloat(item['latitude']) || parseFloat(item['خط العرض']) || 0,
+          Longitude: parseFloat(item['Longitude']) || parseFloat(item['longitude']) || parseFloat(item['خط الطول']) || 0
         }));
       }
 
@@ -1039,25 +1038,7 @@ const renderSalesGrid = () => {
       </div>
     `;
 
-    const btnDec = card.querySelector('.btn-dec');
-    const btnInc = card.querySelector('.btn-inc');
-
-    btnDec.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (cartQty > 0) {
-        adjustCartItemQty(prod.id, -1);
-      }
-    });
-
-    btnInc.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (prod.quantity > 0) {
-        adjustCartItemQty(prod.id, 1);
-      } else {
-        showArabicToast(`عذراً، منتج "${prod.name}" نفد من المخزن!`, 'error');
-      }
-    });
-
+    card.dataset.productId = prod.id;
     salesProductsGrid.appendChild(card);
   });
 };
@@ -1644,10 +1625,11 @@ const renderCustomersList = () => {
     
     const debtClass = c.debt > 0 ? 'text-red-500 font-extrabold' : 'text-emerald-500 font-bold';
 
-    const gpsBtnClass = c.gps 
+    const hasGps = c.Latitude && c.Longitude && parseFloat(c.Latitude) !== 0 && parseFloat(c.Longitude) !== 0;
+    const gpsBtnClass = hasGps 
       ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200' 
       : 'bg-gray-50 text-gray-400 hover:bg-gray-100 border border-gray-200';
-    const gpsBtnTitle = c.gps 
+    const gpsBtnTitle = hasGps 
       ? 'تحديث موقع المحل الجغرافي (مسجل حالياً)' 
       : 'تسجيل موقع المحل الجغرافي (غير مسجل)';
 
@@ -1701,74 +1683,7 @@ const renderCustomersList = () => {
       </div>
     `;
 
-    const cardHeader = card.querySelector('.card-header');
-    const accordionContent = card.querySelector('.accordion-content');
-    const arrow = card.querySelector('.accordion-arrow');
-
-    cardHeader.addEventListener('click', () => {
-      const isHidden = accordionContent.classList.toggle('hidden');
-      if (arrow) {
-        arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
-      }
-    });
-
-    card.querySelector('.btn-make-payment').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openCustomerProfileModal(c.id);
-      if (payDebtFormContainer) {
-        payDebtFormContainer.classList.remove('hidden');
-        payDebtAmount.value = '';
-      }
-    });
-
-    card.querySelector('.btn-ledger').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openCustomerProfileModal(c.id);
-    });
-
-    card.querySelector('.btn-gps-relocate').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (await showCustomConfirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
-        showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
-        try {
-          const gpsVal = await getCurrentLocation();
-          
-          const updatePayload = {
-            action: "updateCustomer",
-            oldShopName: c.name,
-            shopName: c.name,
-            address: c.address,
-            phone: c.phone,
-            gps: gpsVal
-          };
-
-          c.gps = gpsVal;
-          saveAllStatesToLocalStorage();
-          renderCustomersList();
-          showArabicToast('تم تحديث الموقع الجغرافي للمحل بنجاح!', 'success');
-          addToSyncQueue(updatePayload);
-        } catch (err) {
-          console.error("GPS relocate error:", err);
-          showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
-        }
-      }
-    });
-
-    card.querySelector('.btn-edit-customer').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openEditCustomerModal(c);
-    });
-
-    card.querySelector('.btn-return-customer').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openAddReturnModal(c);
-    });
-
-    card.querySelector('.btn-whatsapp').addEventListener('click', (e) => {
-      e.stopPropagation();
-      triggerWhatsAppRedirect(c.phone);
-    });
-
+    card.dataset.customerId = c.id;
     customersList.appendChild(card);
   });
 };
@@ -1850,16 +1765,7 @@ const renderInventoryList = () => {
       </div>
     `;
 
-    card.querySelector('.btn-edit-product').addEventListener('click', (e) => {
-      e.stopPropagation();
-      openEditProductModal(p);
-    });
-
-    card.querySelector('.btn-delete-product').addEventListener('click', (e) => {
-      e.stopPropagation();
-      deleteProduct(p);
-    });
-
+    card.dataset.productId = p.id;
     inventoryList.appendChild(card);
   });
 
@@ -1924,6 +1830,7 @@ const renderCartRows = () => {
 
     const row = document.createElement('div');
     row.className = 'bg-[#f4f6f5] p-3 rounded-2xl border border-gray-100 flex justify-between items-center';
+    row.dataset.productId = item.productId;
     
     row.innerHTML = `
       <div class="space-y-1 flex-1 pr-1">
@@ -1931,11 +1838,11 @@ const renderCartRows = () => {
         <span class="text-[10px] text-gray-500 font-bold block">${prod.price.toLocaleString()} د.ع / ${prod.unit}</span>
       </div>
       <div class="flex items-center gap-2">
-        <button onclick="adjustCartItemQty(${item.productId}, -1)" class="w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
+        <button class="btn-dec w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
           <i class="fa-solid fa-minus text-[10px]"></i>
         </button>
         <span class="text-xs font-black text-gray-900 w-6 text-center select-none">${item.qty}</span>
-        <button onclick="adjustCartItemQty(${item.productId}, 1)" class="w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
+        <button class="btn-inc w-8 h-8 rounded-lg bg-white text-gray-700 font-black flex items-center justify-center border border-gray-200 cursor-pointer active:scale-90 select-none">
           <i class="fa-solid fa-plus text-[10px]"></i>
         </button>
       </div>
@@ -2596,11 +2503,18 @@ const deleteProduct = async (product) => {
     return;
   }
 
+  // State snapshot for rollback
+  const snapshot = {
+    inventory: JSON.parse(JSON.stringify(inventory)),
+    products: JSON.parse(JSON.stringify(products))
+  };
+
   const payload = {
     action: "deleteProduct",
     name: product.name
   };
 
+  // Optimistic UI update
   inventory = inventory.filter(item => item.id !== product.id);
   products = inventory;
   saveAllStatesToLocalStorage();
@@ -2609,7 +2523,36 @@ const deleteProduct = async (product) => {
   renderSalesGrid();
   
   showArabicToast('تم حذف المنتج بنجاح!', 'success');
-  addToSyncQueue(payload);
+
+  if (!navigator.onLine) {
+    addToSyncQueue(payload);
+  } else {
+    (async () => {
+      try {
+        const bodyPayload = { ...payload, token: APP_SECRET_TOKEN };
+        const response = await fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: JSON.stringify(bodyPayload),
+          redirect: 'follow'
+        });
+        const resData = await response.json();
+        if (resData && resData.status === 'error') {
+          throw new Error(resData.message || 'Server error');
+        }
+      } catch (err) {
+        console.error("Failed to delete product on server, rolling back:", err);
+        inventory = snapshot.inventory;
+        products = snapshot.products;
+        saveAllStatesToLocalStorage();
+        renderInventoryList();
+        renderSalesGrid();
+        alert("فشل حذف المنتج من السيرفر: " + err.message + "\nتم استعادة المنتج.");
+      }
+    })();
+  }
 };
 
 const openCustomerModal = () => {
@@ -2718,79 +2661,7 @@ const openCheckoutModal = (keepQuickAddCustomerState = false) => {
     checkoutModal.classList.add('modal-visible');
   }, 20);
 
-  // Automatically trigger geolocation silent check and select the nearest customer if within proximity (e.g. < 100 meters)
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const userLat = position.coords.latitude;
-        const userLon = position.coords.longitude;
-        
-        let cachedCusts = [];
-        try {
-          cachedCusts = JSON.parse(localStorage.getItem('customers') || '[]');
-        } catch (e) {
-          console.error("Failed to parse customers from localStorage:", e);
-        }
-        if (!Array.isArray(cachedCusts) || cachedCusts.length === 0) {
-          cachedCusts = customers || [];
-        }
-
-        let nearestCustomer = null;
-        let minDistance = Infinity;
-
-        cachedCusts.forEach(cust => {
-          let custCoords = null;
-          if (cust.Latitude !== undefined && cust.Longitude !== undefined) {
-            const lat = parseFloat(String(cust.Latitude).trim());
-            const lon = parseFloat(String(cust.Longitude).trim());
-            if (!isNaN(lat) && !isNaN(lon)) {
-              custCoords = [lat, lon];
-            }
-          }
-          if (!custCoords && cust.gps) {
-            custCoords = parseGpsCoords(cust.gps);
-          }
-
-          if (custCoords) {
-            const dist = getHaversineDistanceInMeters([userLat, userLon], custCoords);
-            if (dist < minDistance) {
-              minDistance = dist;
-              nearestCustomer = cust;
-            }
-          }
-        });
-
-        // Set proximity threshold to 100 meters
-        if (nearestCustomer && minDistance <= 100) {
-          if (checkoutCustomerSelect) {
-            let valueToSet = nearestCustomer.id;
-            for (let i = 0; i < checkoutCustomerSelect.options.length; i++) {
-              const opt = checkoutCustomerSelect.options[i];
-              if (opt.value == nearestCustomer.id) {
-                valueToSet = nearestCustomer.id;
-                break;
-              } else if (opt.value === nearestCustomer.name) {
-                valueToSet = nearestCustomer.name;
-                break;
-              } else if (opt.textContent.includes(nearestCustomer.name)) {
-                valueToSet = opt.value;
-                break;
-              }
-            }
-            checkoutCustomerSelect.value = valueToSet;
-            checkoutCustomerSelect.dispatchEvent(new Event('change'));
-          }
-          selectCustomerInDropdown(nearestCustomer.id);
-          console.log(`Auto-selected nearest customer: ${nearestCustomer.name} (${minDistance.toFixed(1)} meters away)`);
-          showArabicToast(`تم تحديد العميل الأقرب تلقائياً: ${nearestCustomer.name} (${minDistance.toFixed(0)} متر)`, 'success');
-        }
-      },
-      (error) => {
-        console.warn("Silent geolocation fetch failed:", error);
-      },
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
-  }
+  // Geolocation trigger is now bound directly to checkout complete button click
 };
 
 const closeCheckoutModal = () => {
@@ -2869,22 +2740,160 @@ if (customersAddBtnShortcut) customersAddBtnShortcut.addEventListener('click', o
 if (inventoryAddBtnShortcut) inventoryAddBtnShortcut.addEventListener('click', openProductModal);
 
 if (salesSearchBar) {
-  salesSearchBar.addEventListener('input', () => {
+  salesSearchBar.addEventListener('input', debounce(() => {
     renderSalesGrid();
+  }, 300));
+}
+
+if (salesProductsGrid) {
+  salesProductsGrid.addEventListener('click', (e) => {
+    const btnInc = e.target.closest('.btn-inc');
+    const btnDec = e.target.closest('.btn-dec');
+    if (!btnInc && !btnDec) return;
+
+    const card = e.target.closest('[data-product-id]');
+    if (!card) return;
+
+    const prodId = parseInt(card.dataset.productId);
+    const prod = inventory.find(p => p.id === prodId);
+    if (!prod) return;
+
+    e.stopPropagation();
+
+    if (btnInc) {
+      if (prod.quantity > 0) {
+        adjustCartItemQty(prod.id, 1);
+      } else {
+        showArabicToast(`عذراً، منتج "${prod.name}" نفد من المخزن!`, 'error');
+      }
+    } else if (btnDec) {
+      const cartItem = cart.find(c => c.productId === prod.id);
+      const cartQty = cartItem ? cartItem.qty : 0;
+      if (cartQty > 0) {
+        adjustCartItemQty(prod.id, -1);
+      }
+    }
   });
 }
 
 const customersSearchBar = document.getElementById('customers-search-bar');
 if (customersSearchBar) {
-  customersSearchBar.addEventListener('input', () => {
+  customersSearchBar.addEventListener('input', debounce(() => {
     renderCustomersList();
+  }, 300));
+}
+
+if (customersList) {
+  customersList.addEventListener('click', async (e) => {
+    const card = e.target.closest('[data-customer-id]');
+    if (!card) return;
+
+    const custId = parseInt(card.dataset.customerId);
+    const c = customers.find(cust => cust.id === custId);
+    if (!c) return;
+
+    const cardHeader = e.target.closest('.card-header');
+    const btnMakePayment = e.target.closest('.btn-make-payment');
+    const btnLedger = e.target.closest('.btn-ledger');
+    const btnGpsRelocate = e.target.closest('.btn-gps-relocate');
+    const btnEditCustomer = e.target.closest('.btn-edit-customer');
+    const btnReturnCustomer = e.target.closest('.btn-return-customer');
+    const btnWhatsapp = e.target.closest('.btn-whatsapp');
+
+    if (cardHeader && !btnMakePayment) {
+      const accordionContent = card.querySelector('.accordion-content');
+      const arrow = card.querySelector('.accordion-arrow');
+      if (accordionContent) {
+        const isHidden = accordionContent.classList.toggle('hidden');
+        if (arrow) {
+          arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+      }
+    } else if (btnMakePayment) {
+      e.stopPropagation();
+      openCustomerProfileModal(c.id);
+      if (payDebtFormContainer) {
+        payDebtFormContainer.classList.remove('hidden');
+        payDebtAmount.value = '';
+      }
+    } else if (btnLedger) {
+      e.stopPropagation();
+      openCustomerProfileModal(c.id);
+    } else if (btnGpsRelocate) {
+      e.stopPropagation();
+      if (await showCustomConfirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
+        showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
+        try {
+          const gpsVal = await getCurrentLocation();
+          let latitude = 0;
+          let longitude = 0;
+          if (gpsVal) {
+            const parts = gpsVal.split(',');
+            if (parts.length === 2) {
+              latitude = parseFloat(parts[0]) || 0;
+              longitude = parseFloat(parts[1]) || 0;
+            }
+          }
+          const updatePayload = {
+            action: "updateCustomer",
+            oldShopName: c.name,
+            shopName: c.name,
+            address: c.address,
+            phone: c.phone,
+            latitude: latitude,
+            longitude: longitude
+          };
+          c.Latitude = latitude;
+          c.Longitude = longitude;
+          saveAllStatesToLocalStorage();
+          renderCustomersList();
+          showArabicToast('تم تحديث الموقع الجغرافي للمحل بنجاح!', 'success');
+          addToSyncQueue(updatePayload);
+        } catch (err) {
+          console.error("GPS relocate error:", err);
+          showArabicToast("فشل تحديد موقع GPS: " + err.message, "error");
+        }
+      }
+    } else if (btnEditCustomer) {
+      e.stopPropagation();
+      openEditCustomerModal(c);
+    } else if (btnReturnCustomer) {
+      e.stopPropagation();
+      openAddReturnModal(c);
+    } else if (btnWhatsapp) {
+      e.stopPropagation();
+      triggerWhatsAppRedirect(c.phone);
+    }
   });
 }
 
 const inventorySearchBar = document.getElementById('inventory-search-bar');
 if (inventorySearchBar) {
-  inventorySearchBar.addEventListener('input', () => {
+  inventorySearchBar.addEventListener('input', debounce(() => {
     renderInventoryList();
+  }, 300));
+}
+
+if (inventoryList) {
+  inventoryList.addEventListener('click', (e) => {
+    const btnEdit = e.target.closest('.btn-edit-product');
+    const btnDelete = e.target.closest('.btn-delete-product');
+    if (!btnEdit && !btnDelete) return;
+
+    const card = e.target.closest('[data-product-id]');
+    if (!card) return;
+
+    const prodId = parseInt(card.dataset.productId);
+    const prod = inventory.find(p => p.id === prodId);
+    if (!prod) return;
+
+    e.stopPropagation();
+
+    if (btnEdit) {
+      openEditProductModal(prod);
+    } else if (btnDelete) {
+      deleteProduct(prod);
+    }
   });
 }
 
@@ -2904,6 +2913,26 @@ if (addCustomerClose) addCustomerClose.addEventListener('click', closeCustomerMo
 if (headerCartBtn) headerCartBtn.addEventListener('click', openCartDrawer);
 if (cartDrawerDismiss) cartDrawerDismiss.addEventListener('click', closeCartDrawer);
 if (cartDrawerClose) cartDrawerClose.addEventListener('click', closeCartDrawer);
+
+if (cartRowsContainer) {
+  cartRowsContainer.addEventListener('click', (e) => {
+    const btnInc = e.target.closest('.btn-inc');
+    const btnDec = e.target.closest('.btn-dec');
+    if (!btnInc && !btnDec) return;
+
+    const row = e.target.closest('[data-product-id]');
+    if (!row) return;
+
+    const prodId = parseInt(row.dataset.productId);
+    e.stopPropagation();
+
+    if (btnInc) {
+      adjustCartItemQty(prodId, 1);
+    } else if (btnDec) {
+      adjustCartItemQty(prodId, -1);
+    }
+  });
+}
 
 if (checkoutDismiss) checkoutDismiss.addEventListener('click', closeCheckoutModal);
 if (checkoutClose) checkoutClose.addEventListener('click', closeCheckoutModal);
@@ -3409,7 +3438,8 @@ if (editCustomerForm) {
       shopName: newShopName,
       address: address,
       phone: phone,
-      gps: editingCustomer.gps || ''
+      latitude: parseFloat(editingCustomer.Latitude) || 0,
+      longitude: parseFloat(editingCustomer.Longitude) || 0
     };
 
     editingCustomer.name = newShopName;
@@ -3473,13 +3503,24 @@ if (customerForm) {
       }
     }
 
+    let latitude = 0;
+    let longitude = 0;
+    if (gpsVal) {
+      const parts = gpsVal.split(',');
+      if (parts.length === 2) {
+        latitude = parseFloat(parts[0]) || 0;
+        longitude = parseFloat(parts[1]) || 0;
+      }
+    }
+
     const newCustomer = {
       id: customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1,
       name,
       address,
       phone,
       debt,
-      gps: gpsVal
+      Latitude: latitude,
+      Longitude: longitude
     };
 
     customers.push(newCustomer);
@@ -3490,7 +3531,8 @@ if (customerForm) {
       address: address,
       phone: phone,
       debt: debt,
-      gps: gpsVal
+      latitude: latitude,
+      longitude: longitude
     };
 
     saveAllStatesToLocalStorage();
@@ -3510,8 +3552,75 @@ if (customerForm) {
 
 if (cartCompleteSaleBtn) {
   cartCompleteSaleBtn.addEventListener('click', () => {
+    // 1. MODAL OPEN TRIGGER
+    alert("1. تم التعرف على زر السلة");
+    
     openCheckoutModal();
-    autoSelectNearestCustomer();
+    
+    // 2. SENSOR START
+    alert("2. جاري تشغيل مستشعر الموقع...");
+    
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // 3. SUCCESS CALLBACK
+          alert("3. تم استلام الإحداثيات بنجاح");
+          
+          const userLat = position.coords.latitude;
+          const userLon = position.coords.longitude;
+          
+          let nearestCustomer = null;
+          let minDistance = Infinity;
+          
+          customers.forEach(cust => {
+            const lat = parseFloat(cust.Latitude);
+            const lon = parseFloat(cust.Longitude);
+            if (!isNaN(lat) && !isNaN(lon) && lat !== 0 && lon !== 0) {
+              const dist = getHaversineDistanceInMeters([userLat, userLon], [lat, lon]);
+              if (dist < minDistance) {
+                minDistance = dist;
+                nearestCustomer = cust;
+              }
+            }
+          });
+          
+          // 4. MATCH FOUND: 200-meter radius
+          if (nearestCustomer && minDistance <= 200) {
+            if (checkoutCustomerSelect) {
+              let valueToSet = nearestCustomer.id;
+              // Look up matching option value (either ID or name)
+              for (let i = 0; i < checkoutCustomerSelect.options.length; i++) {
+                const opt = checkoutCustomerSelect.options[i];
+                if (opt.value == nearestCustomer.id || opt.value === nearestCustomer.name) {
+                  valueToSet = opt.value;
+                  break;
+                } else if (opt.textContent.includes(nearestCustomer.name)) {
+                  valueToSet = opt.value;
+                  break;
+                }
+              }
+              checkoutCustomerSelect.value = valueToSet;
+              checkoutCustomerSelect.dispatchEvent(new Event('change'));
+              
+              // Also update custom label if exists
+              if (customCustomerDropdownLabel) {
+                customCustomerDropdownLabel.textContent = `${nearestCustomer.name} (${nearestCustomer.address})`;
+              }
+              
+              const closestCustomer = nearestCustomer;
+              alert("4. تم التحديد: " + (closestCustomer.shopName || closestCustomer.name));
+            }
+          }
+        },
+        (error) => {
+          // 5. ERROR CALLBACK
+          alert("خطأ في الموقع: " + error.message);
+        },
+        { enableHighAccuracy: true }
+      );
+    } else {
+      alert("مستشعر الموقع غير مدعوم في هذا المتصفح");
+    }
   });
 }
 
@@ -3521,6 +3630,14 @@ if (checkoutConfirmBtn) {
     checkoutConfirmBtn.disabled = true;
     const originalBtnText = checkoutConfirmBtn.textContent;
     checkoutConfirmBtn.textContent = 'جاري الحفظ...';
+
+    // State snapshot for rollback
+    const snapshot = {
+      cart: JSON.parse(JSON.stringify(cart)),
+      inventory: JSON.parse(JSON.stringify(inventory)),
+      customers: JSON.parse(JSON.stringify(customers)),
+      salesHistory: JSON.parse(JSON.stringify(salesHistory))
+    };
 
     try {
       const discountInput = document.getElementById('checkout-discount');
@@ -3575,13 +3692,23 @@ if (checkoutConfirmBtn) {
           }
         } else {
           const newCustomerId = customers.length > 0 ? Math.max(...customers.map(c => c.id)) + 1 : 1;
+          let latitude = 0;
+          let longitude = 0;
+          if (gpsVal) {
+            const parts = gpsVal.split(',');
+            if (parts.length === 2) {
+              latitude = parseFloat(parts[0]) || 0;
+              longitude = parseFloat(parts[1]) || 0;
+            }
+          }
           customer = {
             id: newCustomerId,
             name: theNewName,
             address: "يكمل لاحقاً",
             phone: "-",
             debt: received < finalVal ? (finalVal - received) : 0,
-            gps: gpsVal
+            Latitude: latitude,
+            Longitude: longitude
           };
           customers.push(customer);
           customerName = theNewName;
@@ -3592,7 +3719,8 @@ if (checkoutConfirmBtn) {
             address: "يكمل لاحقاً",
             phone: "-",
             debt: 0,
-            gps: gpsVal
+            latitude: latitude,
+            longitude: longitude
           };
           addToSyncQueue(addCustomerPayload);
         }
@@ -3607,22 +3735,32 @@ if (checkoutConfirmBtn) {
           customer.debt += debtIncrease;
         }
 
-        if (customer && !customer.gps) {
+        if (customer && (!customer.Latitude || !customer.Longitude)) {
           if (await showCustomConfirm("هذا المحل غير مسجل جغرافياً، هل تريد حفظ موقعك الحالي للمحل؟")) {
             showArabicToast('جاري تحديد موقع GPS للمحل...', 'info');
             try {
               const gpsVal = await getCurrentLocation();
-              
+              let latitude = 0;
+              let longitude = 0;
+              if (gpsVal) {
+                const parts = gpsVal.split(',');
+                if (parts.length === 2) {
+                  latitude = parseFloat(parts[0]) || 0;
+                  longitude = parseFloat(parts[1]) || 0;
+                }
+              }
               const updatePayload = {
                 action: "updateCustomer",
                 oldShopName: customer.name,
                 shopName: customer.name,
                 address: customer.address,
                 phone: customer.phone,
-                gps: gpsVal
+                latitude: latitude,
+                longitude: longitude
               };
 
-              customer.gps = gpsVal;
+              customer.Latitude = latitude;
+              customer.Longitude = longitude;
               showArabicToast('تم تسجيل الموقع الجغرافي للمحل بنجاح!', 'success');
               addToSyncQueue(updatePayload);
             } catch (err) {
@@ -3696,7 +3834,38 @@ if (checkoutConfirmBtn) {
         localStorage.setItem('offlineSalesQueue', JSON.stringify(offlineSalesQueue));
         alert("تم حفظ الفاتورة محلياً لعدم توفر إنترنت. ستتم المزامنة لاحقاً.");
       } else {
-        addToSyncQueue(addSalePayload);
+        (async () => {
+          try {
+            const bodyPayload = { ...addSalePayload, token: APP_SECRET_TOKEN };
+            const response = await fetch(BACKEND_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'text/plain;charset=utf-8'
+              },
+              body: JSON.stringify(bodyPayload),
+              redirect: 'follow'
+            });
+            const resData = await response.json();
+            if (resData && resData.status === 'error') {
+              throw new Error(resData.message || 'Server error');
+            }
+            console.log("Sale synced successfully:", invoiceId);
+          } catch (err) {
+            console.error("Failed to sync sale, rolling back:", err);
+            // Revert state
+            cart = snapshot.cart;
+            inventory = snapshot.inventory;
+            products = inventory;
+            customers = snapshot.customers;
+            salesHistory = snapshot.salesHistory;
+            saveAllStatesToLocalStorage();
+            renderSalesGrid();
+            renderCustomersList();
+            renderCartRows();
+            updateCartBadge();
+            alert("فشلت عملية حفظ الفاتورة على السيرفر: " + err.message + "\nتم استعادة حالة النظام والسلة.");
+          }
+        })();
       }
 
     } catch (error) {
@@ -3868,7 +4037,7 @@ const createLiveSpeechOverlay = () => {
     overlay.style.position = 'fixed';
     overlay.style.bottom = '100px';
     overlay.style.left = '50%';
-    overlay.style.transform = 'translateX(-50%)';
+    overlay.style.transform = 'translate3d(-50%, 0, 0)';
     overlay.style.background = 'rgba(0, 0, 0, 0.85)';
     overlay.style.color = '#fff';
     overlay.style.padding = '12px 24px';
@@ -3877,7 +4046,8 @@ const createLiveSpeechOverlay = () => {
     overlay.style.textAlign = 'center';
     overlay.style.fontSize = '14px';
     overlay.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
-    overlay.style.transition = 'opacity 0.3s ease';
+    overlay.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    overlay.style.willChange = 'opacity, transform';
     overlay.style.pointerEvents = 'none';
     document.body.appendChild(overlay);
   }
@@ -4377,9 +4547,9 @@ if (customCustomerDropdownTrigger) {
 }
 
 if (customCustomerDropdownSearch) {
-  customCustomerDropdownSearch.addEventListener('input', () => {
+  customCustomerDropdownSearch.addEventListener('input', debounce(() => {
     renderCustomCustomerDropdownItems();
-  });
+  }, 300));
   customCustomerDropdownSearch.addEventListener('click', (e) => {
     e.stopPropagation();
   });
