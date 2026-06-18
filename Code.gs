@@ -118,9 +118,9 @@ function getProductsData(ss) {
     var name = prodData[j][0];
     if (name) {
       var barcode = prodData[j][1] || "";
-      var buyPrice = parseFloat(prodData[j][2]) || 0;
-      var sellPrice = parseFloat(prodData[j][3]) || 0;
-      var wholesalePrice = parseFloat(prodData[j][4]) || 0;
+      var buyPrice = parseFloat(prodData[j][2]) || 0; // Col C: Buy Price (سعر الشراء) -> buyPrice
+      var sellPrice = parseFloat(prodData[j][3]) || 0; // Col D: Sell Price (سعر البيع) -> wholesalePrice
+      var wholesalePrice = parseFloat(prodData[j][4]) || 0; // Col E: Wholesale Price (سعر الجملة) -> sellPrice
       var category = prodData[j][5] || "";
       var quantity = stockMap[name] !== undefined ? stockMap[name] : 0;
       
@@ -128,8 +128,9 @@ function getProductsData(ss) {
         name: name,
         barcode: barcode,
         buyPrice: buyPrice,
-        price: sellPrice,
-        wholesalePrice: buyPrice !== 0 ? buyPrice : wholesalePrice,
+        wholesalePrice: sellPrice,
+        sellPrice: wholesalePrice,
+        price: wholesalePrice, // default retail price for compatibility
         category: category,
         quantity: quantity
       });
@@ -143,13 +144,13 @@ function addProductRaw(ss, data) {
   var stockSheet = ss.getSheetByName("المخزون");
   if (!prodSheet || !stockSheet) return;
   
-  // Name, Barcode, Buy Price, Sell Price, Wholesale Price, Category
+  // Name, Barcode, Buy Price, Sell Price (Standard Sale), Wholesale Price (Retail), Category
   prodSheet.appendRow([
     data.name,
     data.barcode || "",
     parseFloat(data.buyPrice) || 0,
-    parseFloat(data.sellPrice) || 0,
     parseFloat(data.wholesalePrice) || 0,
+    parseFloat(data.sellPrice) || 0,
     data.category || ""
   ]);
   
@@ -173,8 +174,8 @@ function updateProductRaw(ss, oldName, data) {
         data.name,
         data.barcode || "",
         parseFloat(data.buyPrice) || 0,
-        parseFloat(data.sellPrice) || 0,
         parseFloat(data.wholesalePrice) || 0,
+        parseFloat(data.sellPrice) || 0,
         data.category || ""
       ]]);
       break;

@@ -532,14 +532,18 @@
         </div>
 
         <!-- Price grids -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-3 gap-2">
           <div class="space-y-1">
-            <label for="p-sell" class="text-[10px] font-black text-gray-400 block">سعر البيع ($)</label>
-            <input type="number" id="p-sell" required min="1" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            <label for="p-buy" class="text-[9px] font-black text-gray-400 block">سعر الشراء (الكلفة)</label>
+            <input type="number" id="p-buy" required min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
           </div>
           <div class="space-y-1">
-            <label for="p-buy" class="text-[10px] font-black text-gray-400 block">سعر الشراء ($)</label>
-            <input type="number" id="p-buy" required min="1" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            <label for="p-wholesale" class="text-[9px] font-black text-gray-400 block">سعر البيع (الجملة)</label>
+            <input type="number" id="p-wholesale" required min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          </div>
+          <div class="space-y-1">
+            <label for="p-sell" class="text-[9px] font-black text-gray-400 block">سعر المفرد</label>
+            <input type="number" id="p-sell" required min="0" placeholder="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
           </div>
         </div>
 
@@ -1061,14 +1065,18 @@
           </div>
 
           <!-- Price grids -->
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-3 gap-2">
             <div class="space-y-1">
-              <label for="edit-p-sell" class="text-[10px] font-black text-gray-400 block">سعر البيع (د.ع)</label>
-              <input type="number" id="edit-p-sell" required min="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+              <label for="edit-p-buy" class="text-[9px] font-black text-gray-400 block">سعر الشراء (الكلفة)</label>
+              <input type="number" id="edit-p-buy" required min="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
             </div>
             <div class="space-y-1">
-              <label for="edit-p-buy" class="text-[10px] font-black text-gray-400 block">سعر الشراء (د.ع)</label>
-              <input type="number" id="edit-p-buy" required min="1" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+              <label for="edit-p-wholesale" class="text-[9px] font-black text-gray-400 block">سعر البيع (الجملة)</label>
+              <input type="number" id="edit-p-wholesale" required min="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+            </div>
+            <div class="space-y-1">
+              <label for="edit-p-sell" class="text-[9px] font-black text-gray-400 block">سعر المفرد</label>
+              <input type="number" id="edit-p-sell" required min="0" class="w-full bg-[#f4f6f5] text-gray-800 text-[11px] px-2.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
             </div>
           </div>
 

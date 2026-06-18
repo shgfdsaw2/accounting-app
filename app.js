@@ -589,6 +589,7 @@ const editPName = document.getElementById('edit-p-name');
 const editPBarcode = document.getElementById('edit-p-barcode');
 const editPSell = document.getElementById('edit-p-sell');
 const editPBuy = document.getElementById('edit-p-buy');
+const editPWholesale = document.getElementById('edit-p-wholesale');
 const editPCategory = document.getElementById('edit-p-category');
 const editPQty = document.getElementById('edit-p-qty');
 
@@ -793,14 +794,15 @@ const fetchData = (isSilent = false, username = '', password = '') => {
           id: idx + 1,
           name: item.name || item['اسم المنتج'] || 'منتج غير معروف',
           quantity: parseInt(item.quantity) !== undefined && !isNaN(parseInt(item.quantity)) ? parseInt(item.quantity) : (parseInt(item['الكميه']) || parseInt(item['الكمية']) || 0),
-          price: parseFloat(item.price) !== undefined && !isNaN(parseFloat(item.price)) ? parseFloat(item.price) : (parseFloat(item['سعر البيع']) || 0),
-          wholesalePrice: parseFloat(item.wholesalePrice) !== undefined && !isNaN(parseFloat(item.wholesalePrice)) ? parseFloat(item.wholesalePrice) : (parseFloat(item['سعر الجملة']) || 0),
+          buyPrice: parseFloat(item.buyPrice) !== undefined && !isNaN(parseFloat(item.buyPrice)) ? parseFloat(item.buyPrice) : (parseFloat(item['سعر الشراء']) || 0),
+          wholesalePrice: parseFloat(item.wholesalePrice) !== undefined && !isNaN(parseFloat(item.wholesalePrice)) ? parseFloat(item.wholesalePrice) : (parseFloat(item['سعر البيع']) || 0),
+          sellPrice: parseFloat(item.sellPrice) !== undefined && !isNaN(parseFloat(item.sellPrice)) ? parseFloat(item.sellPrice) : (parseFloat(item['سعر المفرد']) || 0),
+          price: parseFloat(item.sellPrice) !== undefined && !isNaN(parseFloat(item.sellPrice)) ? parseFloat(item.sellPrice) : (parseFloat(item.price) || 0),
           category: item.category || item['الصنف'] || 'الغذائيات',
           unit: item.category || item['الصنف'] || 'عبوة',
           barcode: String(item.barcode !== undefined ? item.barcode : (item['الباركود'] || '')),
           qty: parseInt(item.quantity) !== undefined && !isNaN(parseInt(item.quantity)) ? parseInt(item.quantity) : (parseInt(item['الكميه']) || parseInt(item['الكمية']) || 0),
-          sellPrice: parseFloat(item.price) !== undefined && !isNaN(parseFloat(item.price)) ? parseFloat(item.price) : (parseFloat(item['سعر البيع']) || 0),
-          costPrice: parseFloat(item.wholesalePrice) !== undefined && !isNaN(parseFloat(item.wholesalePrice)) ? parseFloat(item.wholesalePrice) : (parseFloat(item['سعر الشراء']) || 0)
+          costPrice: parseFloat(item.buyPrice) !== undefined && !isNaN(parseFloat(item.buyPrice)) ? parseFloat(item.buyPrice) : (parseFloat(item['سعر الشراء']) || 0)
         }));
 
         // Subtract local cart quantities from inventory to reflect unsaved sales
@@ -1007,18 +1009,17 @@ const renderSalesGrid = () => {
     if (prod.quantity === 0) qtyClass = 'text-red-500 font-extrabold';
     else if (prod.quantity < 5) qtyClass = 'text-amber-500 font-extrabold';
 
-    const { cartonPrice, unitPrice } = getProductPrices(prod);
     card.innerHTML = `
       <div>
         <h4 class="text-xs font-extrabold text-gray-900 line-clamp-2 min-h-[32px]">${prod.name}</h4>
         <div class="mt-2 space-y-1">
           <div class="flex justify-between text-[10px]">
-            <span class="text-gray-400">سعر الكارتون:</span>
-            <span class="font-extrabold text-[#1e5631]">${cartonPrice.toLocaleString()} د.ع</span>
+            <span class="text-gray-400">سعر البيع (الجملة):</span>
+            <span class="font-extrabold text-[#1e5631]">${(prod.wholesalePrice || 0).toLocaleString()} د.ع</span>
           </div>
           <div class="flex justify-between text-[10px]">
             <span class="text-gray-400">سعر المفرد:</span>
-            <span class="font-extrabold text-[#1e5631]">${unitPrice.toLocaleString()} د.ع</span>
+            <span class="font-extrabold text-[#1e5631]">${(prod.sellPrice || 0).toLocaleString()} د.ع</span>
           </div>
           <div class="flex justify-between text-[10px] ${qtyClass}">
             <span>العدد:</span>
@@ -1739,14 +1740,12 @@ const renderInventoryList = () => {
     const card = document.createElement('div');
     card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex justify-between items-center gap-3 select-none';
     
-    const { cartonPrice, unitPrice } = getProductPrices(p);
     card.innerHTML = `
       <div class="space-y-1 flex-1 min-w-0">
         <h4 class="text-xs font-extrabold text-gray-900 truncate">${p.name}</h4>
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-gray-450 font-bold">
-          <span>شراء: <strong class="text-gray-700">${p.wholesalePrice.toLocaleString()} د.ع</strong></span>
-          <span>كارتون: <strong class="text-gray-700">${cartonPrice.toLocaleString()} د.ع</strong></span>
-          <span>مفرد: <strong class="text-gray-700">${unitPrice.toLocaleString()} د.ع</strong></span>
+          <span>شراء (الكلفة): <strong class="text-gray-700">${(p.buyPrice || 0).toLocaleString()} د.ع</strong></span>
+          <span>بيع (الجملة): <strong class="text-gray-700">${(p.wholesalePrice || 0).toLocaleString()} د.ع</strong></span>
         </div>
       </div>
       <div class="flex items-center gap-3.5">
@@ -2231,8 +2230,9 @@ const openEditProductModal = (product) => {
   
   if (editPName) editPName.value = product.name;
   if (editPBarcode) editPBarcode.value = product.barcode || '';
-  if (editPSell) editPSell.value = product.price;
-  if (editPBuy) editPBuy.value = product.wholesalePrice;
+  if (editPSell) editPSell.value = product.sellPrice !== undefined ? product.sellPrice : (product.price || 0);
+  if (editPBuy) editPBuy.value = product.buyPrice !== undefined ? product.buyPrice : 0;
+  if (editPWholesale) editPWholesale.value = product.wholesalePrice !== undefined ? product.wholesalePrice : 0;
   if (editPCategory) editPCategory.value = product.category || 'الغذائيات';
   if (editPQty) editPQty.value = product.quantity;
   
@@ -3312,13 +3312,13 @@ if (productForm) {
     
     const name = document.getElementById('p-name').value.trim();
     const barcode = document.getElementById('p-barcode').value.trim();
-    const sell = parseFloat(document.getElementById('p-sell').value);
-    const buy = parseFloat(document.getElementById('p-buy').value);
-    const wholesale = 0;
+    const buyPrice = parseFloat(document.getElementById('p-buy').value) || 0;
+    const wholesalePrice = parseFloat(document.getElementById('p-wholesale').value) || 0;
+    const sellPrice = parseFloat(document.getElementById('p-sell').value) || 0;
     const unit = document.getElementById('p-unit').value;
     const qty = parseInt(document.getElementById('p-qty').value) || 0;
 
-    if (!name || isNaN(sell) || isNaN(buy)) {
+    if (!name || isNaN(sellPrice) || isNaN(wholesalePrice) || isNaN(buyPrice)) {
       showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
       return;
     }
@@ -3328,10 +3328,11 @@ if (productForm) {
       name,
       quantity: qty,
       qty,
-      price: sell,
-      sellPrice: sell,
-      wholesalePrice: buy,
-      costPrice: buy,
+      price: sellPrice,
+      sellPrice: sellPrice,
+      wholesalePrice: wholesalePrice,
+      buyPrice: buyPrice,
+      costPrice: buyPrice,
       category: 'الغذائيات',
       unit,
       barcode
@@ -3343,9 +3344,9 @@ if (productForm) {
       action: "addProduct",
       name: name,
       barcode: barcode,
-      buyPrice: buy,
-      sellPrice: sell,
-      wholesalePrice: wholesale,
+      buyPrice: buyPrice,
+      sellPrice: sellPrice,
+      wholesalePrice: wholesalePrice,
       category: unit,
       quantity: qty
     };
@@ -3370,13 +3371,13 @@ if (editProductForm) {
     const originalName = editingProduct.name;
     const newName = editPName.value.trim();
     const barcode = editPBarcode.value.trim();
-    const sellPrice = parseFloat(editPSell.value);
-    const buyPrice = parseFloat(editPBuy.value);
-    const wholesalePrice = 0;
+    const buyPrice = parseFloat(editPBuy.value) || 0;
+    const wholesalePrice = parseFloat(editPWholesale.value) || 0;
+    const sellPrice = parseFloat(editPSell.value) || 0;
     const category = editPCategory.value.trim();
     const quantity = parseInt(editPQty.value) || 0;
 
-    if (!newName || isNaN(sellPrice) || isNaN(buyPrice) || !category) {
+    if (!newName || isNaN(sellPrice) || isNaN(wholesalePrice) || isNaN(buyPrice) || !category) {
       showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
       return;
     }
@@ -3397,8 +3398,9 @@ if (editProductForm) {
     editingProduct.barcode = barcode;
     editingProduct.sellPrice = sellPrice;
     editingProduct.price = sellPrice;
+    editingProduct.wholesalePrice = wholesalePrice;
+    editingProduct.buyPrice = buyPrice;
     editingProduct.costPrice = buyPrice;
-    editingProduct.wholesalePrice = buyPrice;
     editingProduct.category = category;
     editingProduct.unit = category;
     editingProduct.qty = quantity;
