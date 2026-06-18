@@ -3552,20 +3552,11 @@ if (customerForm) {
 
 if (cartCompleteSaleBtn) {
   cartCompleteSaleBtn.addEventListener('click', () => {
-    // 1. MODAL OPEN TRIGGER
-    alert("1. تم التعرف على زر السلة");
-    
     openCheckoutModal();
-    
-    // 2. SENSOR START
-    alert("2. جاري تشغيل مستشعر الموقع...");
     
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          // 3. SUCCESS CALLBACK
-          alert("3. تم استلام الإحداثيات بنجاح");
-          
           const userLat = position.coords.latitude;
           const userLon = position.coords.longitude;
           
@@ -3606,15 +3597,11 @@ if (cartCompleteSaleBtn) {
               if (customCustomerDropdownLabel) {
                 customCustomerDropdownLabel.textContent = `${nearestCustomer.name} (${nearestCustomer.address})`;
               }
-              
-              const closestCustomer = nearestCustomer;
-              alert("4. تم التحديد: " + (closestCustomer.shopName || closestCustomer.name));
             }
           }
         },
         (error) => {
-          // 5. ERROR CALLBACK
-          alert("خطأ في الموقع: " + error.message);
+          alert("تعذر تحديد الموقع، يرجى تفعيل الـ GPS");
         },
         { enableHighAccuracy: true }
       );
