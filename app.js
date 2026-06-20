@@ -12,7 +12,7 @@ let inventory = [];
 let products = inventory;
 let customers = [];
 let suppliers = [];
-let cart = [];
+let cart = JSON.parse(localStorage.getItem('posCart')) || [];
 let salesHistory = [];
 let purchases = [];
 let purchaseCart = [];
@@ -29,6 +29,10 @@ let users = [];
 let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
 const APP_SECRET_TOKEN = "POS_AUTH_KEY_2026";
+
+const saveCartState = () => {
+  localStorage.setItem('posCart', JSON.stringify(cart));
+};
 
 // --- DEBOUNCE UTILITY ---
 const debounce = (func, delay) => {
@@ -240,8 +244,8 @@ const loadStatesFromLocalStorage = () => {
 };
 
 // --- OPTIMISTIC UI BACKGROUND SYNC QUEUE ---
-let syncQueue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
-const saveQueue = () => localStorage.setItem('syncQueue', JSON.stringify(syncQueue));
+let syncQueue = JSON.parse(localStorage.getItem('posSyncQueue')) || [];
+const saveQueue = () => localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
 
 const addToSyncQueue = (payload) => {
   syncQueue.push({
@@ -249,6 +253,7 @@ const addToSyncQueue = (payload) => {
     payload: payload
   });
   saveQueue();
+  showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
   processSyncQueue();
 };
 
@@ -273,16 +278,19 @@ const processSyncQueue = async () => {
         body: JSON.stringify(bodyPayload),
         redirect: 'follow'
       });
-      
       const resData = await response.json();
-      if (resData && resData.status === 'error') {
-        console.error("Server returned sync error:", resData.message);
-        syncQueue.shift();
-        saveQueue();
-      } else {
+      if (resData && resData.status === 'success') {
         syncQueue.shift();
         saveQueue();
         console.log("Sync item processed successfully:", item.payload.action);
+      } else {
+        console.error("Server returned error for action:", item.payload.action, resData ? resData.message : "No response");
+        if (resData && resData.status === 'success') {
+          syncQueue.shift();
+          saveQueue();
+        } else {
+          throw new Error(resData ? resData.message : "Request failed on server");
+        }
       }
     } catch (err) {
       console.error("Failed to sync queue item:", err);
@@ -293,55 +301,8 @@ const processSyncQueue = async () => {
   isProcessingQueue = false;
 };
 
-const syncOfflineSales = async () => {
-  let offlineSalesQueue = [];
-  try {
-    offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
-  } catch (e) {
-    console.error("Failed to parse offlineSalesQueue from localStorage:", e);
-    offlineSalesQueue = [];
-    localStorage.setItem('offlineSalesQueue', '[]');
-  }
-  if (!Array.isArray(offlineSalesQueue) || offlineSalesQueue.length === 0) return;
-
-  console.log(`Syncing offline sales queue... ${offlineSalesQueue.length} items.`);
-
-  const failedItems = [];
-
-  for (const salePayload of offlineSalesQueue) {
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify({ ...salePayload, token: APP_SECRET_TOKEN }),
-        redirect: 'follow'
-      });
-
-      const resData = await response.json();
-      if (resData && resData.status === 'success') {
-        console.log("Offline sale synced successfully:", salePayload.invoiceId);
-      } else {
-        console.error("Server returned error or invalid status for offline sale sync:", resData ? resData.message : "No response");
-        failedItems.push(salePayload);
-      }
-    } catch (err) {
-      console.error("Failed to sync offline sale item:", err);
-      failedItems.push(salePayload);
-    }
-  }
-
-  localStorage.setItem('offlineSalesQueue', JSON.stringify(failedItems));
-  if (failedItems.length === 0) {
-    showArabicToast("تم مزامنة جميع الفواتير المعلقة بنجاح!", "success");
-  }
-};
-
-window.addEventListener('online', () => {
-  processSyncQueue();
-  syncOfflineSales();
-});
+window.addEventListener('online', processSyncQueue);
+setInterval(processSyncQueue, 30000);
 
 const getCurrentLocation = () => {
   return new Promise((resolve, reject) => {
@@ -999,8 +960,9 @@ const renderSalesGrid = () => {
   filtered.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
   filtered.forEach(prod => {
+    const currentThreshold = parseInt(localStorage.getItem('lowStockThreshold')) || 5;
     const card = document.createElement('div');
-    card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex flex-col justify-between space-y-3 select-none';
+    card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex flex-col justify-between space-y-3 select-none' + (prod.quantity <= currentThreshold ? ' low-stock-color' : '');
     
     const cartItem = cart.find(c => c.productId === prod.id);
     const cartQty = cartItem ? cartItem.qty : 0;
@@ -1580,6 +1542,110 @@ const closeCustomerProfileModal = () => {
   }, 300);
 };
 
+const ledgerModal = document.getElementById('ledgerModal');
+const ledgerModalClose = document.getElementById('ledger-modal-close');
+const ledgerPrintBtn = document.getElementById('ledger-print-btn');
+
+const openLedgerModal = () => {
+  if (ledgerModal) ledgerModal.classList.remove('hidden');
+};
+
+const closeLedgerModal = () => {
+  if (ledgerModal) ledgerModal.classList.add('hidden');
+};
+
+if (ledgerModalClose) {
+  ledgerModalClose.addEventListener('click', closeLedgerModal);
+}
+if (ledgerModal) {
+  ledgerModal.addEventListener('click', (e) => {
+    if (e.target === ledgerModal) closeLedgerModal();
+  });
+}
+if (ledgerPrintBtn) {
+  ledgerPrintBtn.addEventListener('click', () => {
+    window.print();
+  });
+}
+
+const fetchCustomerStatement = async (customerName) => {
+  try {
+    showArabicToast('جاري تحميل كشف الحساب...', 'info');
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({
+        action: "getCustomerStatement",
+        customerName: customerName,
+        token: APP_SECRET_TOKEN
+      }),
+      redirect: 'follow'
+    });
+    
+    const result = await response.json();
+    if (result && result.status === 'success') {
+      return result.statement || [];
+    } else {
+      throw new Error(result.message || 'فشل في جلب البيانات');
+    }
+  } catch (err) {
+    console.error("fetchCustomerStatement error:", err);
+    showArabicToast('تعذر تحميل كشف الحساب: ' + err.message, 'error');
+    return [];
+  }
+};
+
+const populateLedgerModal = (customer, statement) => {
+  const ledgerCustomerName = document.getElementById('ledger-customer-name');
+  const ledgerCustomerDebt = document.getElementById('ledger-customer-debt');
+  const ledgerTableBody = document.getElementById('ledger-table-body');
+  
+  if (ledgerCustomerName) ledgerCustomerName.textContent = `اسم العميل: ${customer.name}`;
+  if (ledgerCustomerDebt) ledgerCustomerDebt.textContent = `${customer.debt.toLocaleString()} د.ع`;
+  
+  if (!ledgerTableBody) return;
+  ledgerTableBody.innerHTML = '';
+  
+  if (!statement || statement.length === 0) {
+    ledgerTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-400">لا توجد حركات مسجلة في كشف الحساب لهذا العميل.</td></tr>';
+    return;
+  }
+  
+  statement.forEach(row => {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b border-gray-100 hover:bg-gray-50 transition-colors';
+    
+    // Format date cleanly
+    let dateStr = row.date || '';
+    if (dateStr) {
+      try {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          dateStr = d.toLocaleDateString('ar-IQ');
+        }
+      } catch (e) {}
+    }
+    
+    const type = row.type || '';
+    const invoiceId = row.invoiceId || '';
+    const total = parseFloat(row.total) || 0;
+    const received = parseFloat(row.received) || 0;
+    const details = row.details || '';
+    
+    tr.innerHTML = `
+      <td class="py-2.5 px-3 whitespace-nowrap text-right">${dateStr}</td>
+      <td class="py-2.5 px-3 text-right">${type}</td>
+      <td class="py-2.5 px-3 text-right font-mono">${invoiceId}</td>
+      <td class="py-2.5 px-3 text-right font-bold">${total > 0 ? total.toLocaleString() + ' د.ع' : '-'}</td>
+      <td class="py-2.5 px-3 text-right text-emerald-600 font-bold">${received > 0 ? received.toLocaleString() + ' د.ع' : '-'}</td>
+      <td class="py-2.5 px-3 text-right max-w-[200px] truncate" title="${details}">${details}</td>
+    `;
+    ledgerTableBody.appendChild(tr);
+  });
+};
+
 // --- RENDER COMPONENT: CUSTOMER DIRECTORY ---
 const renderCustomersList = () => {
   if (!customersList) return;
@@ -1737,8 +1803,9 @@ const renderInventoryList = () => {
   }
 
   filtered.forEach(p => {
+    const currentThreshold = parseInt(localStorage.getItem('lowStockThreshold')) || 5;
     const card = document.createElement('div');
-    card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex justify-between items-center gap-3 select-none';
+    card.className = 'bg-white p-4.5 rounded-2xl border border-gray-100 clean-shadow flex justify-between items-center gap-3 select-none' + (p.quantity <= currentThreshold ? ' low-stock-color' : '');
     
     card.innerHTML = `
       <div class="space-y-1 flex-1 min-w-0">
@@ -1908,6 +1975,7 @@ const adjustCartItemQty = (productId, change) => {
   renderCartRows();
   updateCartBadge();
   renderSalesGrid();
+  saveCartState();
 };
 window.adjustCartItemQty = adjustCartItemQty;
 
@@ -2818,7 +2886,9 @@ if (customersList) {
       }
     } else if (btnLedger) {
       e.stopPropagation();
-      openCustomerProfileModal(c.id);
+      const statement = await fetchCustomerStatement(c.name);
+      populateLedgerModal(c, statement);
+      openLedgerModal();
     } else if (btnGpsRelocate) {
       e.stopPropagation();
       if (await showCustomConfirm("تحديث موقع المحل إلى مكانك الحالي؟")) {
@@ -3199,7 +3269,41 @@ if (purSubmitBtn) {
     renderInventoryList();
     
     showArabicToast('تم تسجيل عملية الشراء وتحديث المخزن بنجاح!', 'success');
-    addToSyncQueue(payload);
+    if (!navigator.onLine) {
+      syncQueue.push({
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        payload: payload
+      });
+      localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+      showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
+    } else {
+      (async () => {
+        try {
+          const bodyPayload = { ...payload, token: APP_SECRET_TOKEN };
+          const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(bodyPayload),
+            redirect: 'follow'
+          });
+          const resData = await response.json();
+          if (resData && resData.status === 'error') {
+            throw new Error(resData.message || 'Server error');
+          }
+          console.log("Purchase synced successfully:", invoiceId);
+        } catch (err) {
+          console.warn("Failed to sync purchase, queuing offline:", err);
+          syncQueue.push({
+            id: Date.now() + Math.random().toString(36).substr(2, 9),
+            payload: payload
+          });
+          localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+          showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
+        }
+      })();
+    }
   });
 }
 
@@ -3291,7 +3395,41 @@ if (retSubmitBtn) {
     renderInventoryList();
     renderSalesGrid();
 
-    addToSyncQueue(payload);
+    if (!navigator.onLine) {
+      syncQueue.push({
+        id: Date.now() + Math.random().toString(36).substr(2, 9),
+        payload: payload
+      });
+      localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+      showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
+    } else {
+      (async () => {
+        try {
+          const bodyPayload = { ...payload, token: APP_SECRET_TOKEN };
+          const response = await fetch(BACKEND_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'text/plain;charset=utf-8'
+            },
+            body: JSON.stringify(bodyPayload),
+            redirect: 'follow'
+          });
+          const resData = await response.json();
+          if (resData && resData.status === 'error') {
+            throw new Error(resData.message || 'Server error');
+          }
+          console.log("Return synced successfully:", returnId);
+        } catch (err) {
+          console.warn("Failed to sync return, queuing offline:", err);
+          syncQueue.push({
+            id: Date.now() + Math.random().toString(36).substr(2, 9),
+            payload: payload
+          });
+          localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+          showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
+        }
+      })();
+    }
   });
 }
 
@@ -3810,6 +3948,7 @@ if (checkoutConfirmBtn) {
       };
 
       cart = [];
+      localStorage.removeItem('posCart');
       updateCartBadge();
       renderSalesGrid();
       renderCustomersList();
@@ -3818,10 +3957,12 @@ if (checkoutConfirmBtn) {
       openInvoiceOptionsModal(saleObject, customer);
 
       if (!navigator.onLine) {
-        let offlineSalesQueue = JSON.parse(localStorage.getItem('offlineSalesQueue') || '[]');
-        offlineSalesQueue.push(addSalePayload);
-        localStorage.setItem('offlineSalesQueue', JSON.stringify(offlineSalesQueue));
-        alert("تم حفظ الفاتورة محلياً لعدم توفر إنترنت. ستتم المزامنة لاحقاً.");
+        syncQueue.push({
+          id: Date.now() + Math.random().toString(36).substr(2, 9),
+          payload: addSalePayload
+        });
+        localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+        showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
       } else {
         (async () => {
           try {
@@ -3840,19 +3981,13 @@ if (checkoutConfirmBtn) {
             }
             console.log("Sale synced successfully:", invoiceId);
           } catch (err) {
-            console.error("Failed to sync sale, rolling back:", err);
-            // Revert state
-            cart = snapshot.cart;
-            inventory = snapshot.inventory;
-            products = inventory;
-            customers = snapshot.customers;
-            salesHistory = snapshot.salesHistory;
-            saveAllStatesToLocalStorage();
-            renderSalesGrid();
-            renderCustomersList();
-            renderCartRows();
-            updateCartBadge();
-            alert("فشلت عملية حفظ الفاتورة على السيرفر: " + err.message + "\nتم استعادة حالة النظام والسلة.");
+            console.warn("Failed to sync sale, queuing offline:", err);
+            syncQueue.push({
+              id: Date.now() + Math.random().toString(36).substr(2, 9),
+              payload: addSalePayload
+            });
+            localStorage.setItem('posSyncQueue', JSON.stringify(syncQueue));
+            showArabicToast("تم حفظ العملية محلياً (بدون إنترنت) وسيتم رفعها تلقائياً عند عودة الاتصال", "info");
           }
         })();
       }
@@ -4153,6 +4288,7 @@ const processSmartVoice = async (transcript) => {
         updateCartBadge();
         renderSalesGrid();
         renderCartRows();
+        saveCartState();
       }
 
       let sum = 0;
@@ -4437,6 +4573,7 @@ const executeAiCommand = async () => {
         updateCartBadge();
         renderSalesGrid();
         renderCartRows();
+        saveCartState();
       }
 
       if (aiData.paidAmount !== undefined && aiData.paidAmount !== null) {
@@ -4939,12 +5076,24 @@ const initApp = () => {
 
   loadStatesFromLocalStorage();
   
+  const savedThreshold = parseInt(localStorage.getItem('lowStockThreshold')) || 5;
+  if (document.getElementById('lowStockThresholdInput')) {
+    document.getElementById('lowStockThresholdInput').value = savedThreshold;
+  }
+  document.getElementById('lowStockThresholdInput')?.addEventListener('input', (e) => {
+    localStorage.setItem('lowStockThreshold', e.target.value);
+    renderProductsList();
+  });
+  
   renderInventoryList();
   renderCustomersList();
   renderSalesGrid();
 
   switchView('sales');
   updateCartBadge();
+  if (cart.length > 0) {
+    renderCartRows();
+  }
 
   if (activeUser) {
     applyRBACRules();
@@ -4952,9 +5101,6 @@ const initApp = () => {
 
   fetchData(true).catch(() => {});
   processSyncQueue();
-  if (navigator.onLine) {
-    syncOfflineSales();
-  }
 };
 
 if (document.readyState === 'loading') {

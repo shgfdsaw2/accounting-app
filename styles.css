@@ -484,3 +484,30 @@ body {
   color: #ef4444 !important;
   border-color: #fca5a5 !important;
 }
+
+/* Print ledger styling */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-section, .print-section * {
+    visibility: visible;
+  }
+  .print-section {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    background: white;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+
+.low-stock-color { background-color: #ffebee !important; }
+
