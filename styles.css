@@ -511,3 +511,20 @@ body {
 
 .low-stock-color { background-color: #ffebee !important; }
 
+.d-none { display: none !important; }
+
+@media print {
+  body.print-receipt-mode > :not(#thermalReceipt) {
+    display: none !important;
+  }
+  body.print-receipt-mode #thermalReceipt {
+    display: block !important;
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+    direction: rtl;
+    font-family: 'Cairo', sans-serif;
+  }
+}
+
+

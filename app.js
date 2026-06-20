@@ -34,6 +34,170 @@ const saveCartState = () => {
   localStorage.setItem('posCart', JSON.stringify(cart));
 };
 
+const printThermalReceipt = (saleData) => {
+  const thermalReceipt = document.getElementById('thermalReceipt');
+  if (!thermalReceipt) return;
+
+  const itemsHtml = (saleData.items || []).map(item => `
+    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
+      <span>${item.name} x${item.qty}</span>
+      <span>${(item.price * item.qty).toLocaleString()} د.ع</span>
+    </div>
+  `).join('');
+
+  thermalReceipt.innerHTML = `
+    <div style="font-family: 'Cairo', sans-serif; direction: rtl; width: 80mm; padding: 10px; background: white; color: black; box-sizing: border-box;">
+      <div style="text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+        <h2 style="font-size: 14px; font-weight: 900; margin: 0;">نظام المبيعات والمخازن الذكي</h2>
+        <span style="font-size: 10px; font-weight: bold;">وصل مبيعات (حراري)</span>
+      </div>
+      
+      <div style="font-size: 11px; margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+        <div>رقم الفاتورة: ${saleData.invoiceId}</div>
+        <div>التاريخ: ${saleData.date}</div>
+        <div>العميل: ${saleData.customerName}</div>
+      </div>
+      
+      <div style="margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+        <div style="font-size: 10px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 3px;">
+          <span>المادة والكمية</span>
+          <span>السعر</span>
+        </div>
+        ${itemsHtml}
+      </div>
+      
+      <div style="font-size: 11px; font-weight: bold;">
+        <div style="display: flex; justify-content: space-between;">
+          <span>المجموع الفرعي:</span>
+          <span>${(saleData.subtotal || saleData.totalAmount || 0).toLocaleString()} د.ع</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>الخصم:</span>
+          <span>${(saleData.discount || 0).toLocaleString()} د.ع</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px;">
+          <span>المجموع الكلي:</span>
+          <span>${(saleData.totalAmount || 0).toLocaleString()} د.ع</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
+          <span>المستلم:</span>
+          <span>${(saleData.receivedAmount || 0).toLocaleString()} د.ع</span>
+        </div>
+      </div>
+      
+      <div style="text-align: center; margin-top: 15px; font-size: 10px; border-top: 1px dashed #000; padding-top: 5px;">
+        شكراً لتعاملكم معنا!
+      </div>
+    </div>
+  `;
+
+  document.body.classList.add('print-receipt-mode');
+  window.print();
+  document.body.classList.remove('print-receipt-mode');
+  thermalReceipt.innerHTML = '';
+};
+
+const searchArchive = async (invoiceId, query) => {
+  try {
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({
+        action: "searchArchiveInvoices",
+        invoiceId: invoiceId,
+        query: query,
+        token: APP_SECRET_TOKEN
+      }),
+      redirect: 'follow'
+    });
+    const resData = await response.json();
+    if (resData && resData.status === 'success') {
+      return resData.invoices || [];
+    } else {
+      showArabicToast(resData.message || 'فشل البحث في الأرشيف', 'error');
+      return [];
+    }
+  } catch (err) {
+    console.error("Archive search failed:", err);
+    showArabicToast("فشل الاتصال بالسيرفر للبحث في الأرشيف", "error");
+    return [];
+  }
+};
+
+const renderArchiveResults = (invoices) => {
+  if (!salesHistoryList) return;
+  salesHistoryList.innerHTML = '';
+
+  if (!invoices || invoices.length === 0) {
+    salesHistoryList.innerHTML = '<div class="text-center py-8 text-xs text-gray-400">لا توجد نتائج مطابقة في الأرشيف.</div>';
+    return;
+  }
+
+  invoices.forEach(sale => {
+    const row = document.createElement('div');
+    row.className = 'bg-[#ffebee]/40 p-3.5 rounded-xl border border-red-100 flex justify-between items-center select-none cursor-pointer hover:border-red-200 transition-all active:scale-[0.98]';
+    
+    let badgeClass = '';
+    if (sale.status === 'مدفوع') badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    else if (sale.status === 'جزئي') badgeClass = 'bg-amber-50 text-amber-700 border-amber-100';
+    else badgeClass = 'bg-red-50 text-red-700 border-red-100';
+
+    row.innerHTML = `
+      <div class="space-y-1">
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-extrabold text-gray-900">${sale.customerName}</span>
+          <span class="text-[9px] px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-200 font-black">مؤرشفة</span>
+          <span class="text-[9px] px-2 py-0.5 rounded-full border ${badgeClass} font-black">${sale.status || 'مدفوع'}</span>
+        </div>
+        <span class="text-[9px] text-gray-400 font-bold block">${sale.date}</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-black text-red-700 bg-red-50 px-3 py-1 rounded-lg">
+          ${parseFloat(sale.totalAmount || 0).toLocaleString()} د.ع
+        </span>
+        <button class="btn-print-archive-invoice w-7 h-7 rounded-lg bg-white text-gray-500 hover:text-gray-800 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors" title="🖨️ طباعة حرارية">
+          <i class="fa-solid fa-print text-[10px]"></i>
+        </button>
+      </div>
+    `;
+
+    row.addEventListener('click', () => {
+      const normalizedSale = {
+        invoiceId: sale.invoiceId,
+        date: sale.date,
+        customerName: sale.customerName,
+        subtotal: parseFloat(sale.subtotal) || parseFloat(sale.totalAmount) || 0,
+        discount: parseFloat(sale.discount) || 0,
+        totalAmount: parseFloat(sale.totalAmount) || 0,
+        receivedAmount: parseFloat(sale.receivedAmount) || 0,
+        status: sale.status || 'مدفوع',
+        items: typeof sale.items === 'string' ? JSON.parse(sale.items) : (sale.items || [])
+      };
+      openInvoiceDetailsModal(normalizedSale);
+    });
+
+    row.querySelector('.btn-print-archive-invoice').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const normalizedSale = {
+        invoiceId: sale.invoiceId,
+        date: sale.date,
+        customerName: sale.customerName,
+        subtotal: parseFloat(sale.subtotal) || parseFloat(sale.totalAmount) || 0,
+        discount: parseFloat(sale.discount) || 0,
+        totalAmount: parseFloat(sale.totalAmount) || 0,
+        receivedAmount: parseFloat(sale.receivedAmount) || 0,
+        status: sale.status || 'مدفوع',
+        items: typeof sale.items === 'string' ? JSON.parse(sale.items) : (sale.items || [])
+      };
+      printThermalReceipt(normalizedSale);
+    });
+
+    salesHistoryList.appendChild(row);
+  });
+};
+
 // --- DEBOUNCE UTILITY ---
 const debounce = (func, delay) => {
   let timer;
@@ -2967,6 +3131,68 @@ if (inventoryList) {
   });
 }
 
+const btnArchiveDb = document.getElementById('btnArchiveDb');
+if (btnArchiveDb) {
+  btnArchiveDb.addEventListener('click', async () => {
+    const doubleCheck = confirm("⚠️ تحذير هام جداً: هل أنت متأكد من رغبتك في إقفال السنة المالية وأرشفة جميع السجلات؟ هذا الإجراء سيؤدي إلى ترحيل السجلات الحالية ولا يمكن التراجع عنه!");
+    if (!doubleCheck) return;
+
+    try {
+      showArabicToast('جاري أرشفة البيانات وإقفال السنة المالية...', 'info');
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          action: "archiveData",
+          token: APP_SECRET_TOKEN
+        }),
+        redirect: 'follow'
+      });
+      const resData = await response.json();
+      if (resData && resData.status === 'success') {
+        showArabicToast('تم إقفال السنة المالية وأرشفة السجلات بنجاح!', 'success');
+        await fetchData(true);
+      } else {
+        alert("فشل في الأرشفة: " + (resData ? resData.message : "خطأ غير معروف"));
+      }
+    } catch (err) {
+      console.error("Archive request failed:", err);
+      alert("حدث خطأ أثناء الاتصال بالسيرفر لإجراء الأرشفة.");
+    }
+  });
+}
+
+const btnArchiveSearch = document.getElementById('btn-archive-search');
+const archiveSearchInput = document.getElementById('archive-search-input');
+
+if (btnArchiveSearch) {
+  btnArchiveSearch.addEventListener('click', async () => {
+    const val = archiveSearchInput ? archiveSearchInput.value.trim() : '';
+    if (!val) {
+      renderSalesHistory();
+      return;
+    }
+    
+    const isInv = val.toUpperCase().startsWith('INV-') || val.toUpperCase().startsWith('RET-') || val.toUpperCase().startsWith('PUR-');
+    const invoiceId = isInv ? val : '';
+    const query = isInv ? '' : val;
+    
+    showArabicToast('جاري البحث في الأرشيف...', 'info');
+    const results = await searchArchive(invoiceId, query);
+    renderArchiveResults(results);
+  });
+}
+
+if (archiveSearchInput) {
+  archiveSearchInput.addEventListener('input', (e) => {
+    if (!e.target.value.trim()) {
+      renderSalesHistory();
+    }
+  });
+}
+
 if (headerAddBtn) headerAddBtn.addEventListener('click', openQuickMenu);
 if (quickMenuDismiss) quickMenuDismiss.addEventListener('click', closeQuickMenu);
 if (quickMenuClose) quickMenuClose.addEventListener('click', closeQuickMenu);
@@ -3955,6 +4181,7 @@ if (checkoutConfirmBtn) {
       closeCheckoutModal();
       saveAllStatesToLocalStorage();
       openInvoiceOptionsModal(saleObject, customer);
+      printThermalReceipt(saleObject);
 
       if (!navigator.onLine) {
         syncQueue.push({

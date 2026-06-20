@@ -237,9 +237,14 @@
             <i class="fa-solid fa-sliders text-[#1e5631] text-xs"></i>
             <h3 class="text-xs font-black text-gray-800">إعدادات المخزن (تنبيه نفاذ المخزون)</h3>
           </div>
-          <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center justify-between gap-3 pb-1">
             <label>حد تنبيه نفاذ المخزون (بالقطع):</label>
             <input type="number" id="lowStockThresholdInput" min="0" value="5" class="form-control w-20 bg-[#f4f6f5] text-gray-800 text-xs px-3 py-2.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold text-center">
+          </div>
+          <div class="border-t border-gray-100 pt-3 select-none">
+            <button id="btnArchiveDb" class="w-full py-3.5 bg-red-650 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-98 text-center">
+              إقفال السنة المالية (أرشفة السجلات)
+            </button>
           </div>
         </div>
 
@@ -666,6 +671,18 @@
           <h3 class="text-sm font-black text-gray-900">سجل البيع (الفواتير)</h3>
           <button id="sales-history-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
             <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Archive Search Section -->
+      <div class="mb-3 space-y-2 border-b border-gray-100 pb-3 select-none">
+        <span class="text-[10px] font-bold text-gray-400 block mb-1">البحث في الأرشيف السنوي:</span>
+        <div class="flex gap-2">
+          <input type="text" id="archive-search-input" placeholder="رقم الفاتورة أو اسم العميل..." class="flex-1 bg-[#f4f6f5] text-gray-800 text-xs px-3 py-2.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+          <button id="btn-archive-search" class="px-4 py-2.5 bg-[#1e5631] hover:bg-[#163e23] text-white text-xs font-black rounded-xl cursor-pointer transition-all active:scale-95 flex items-center gap-1">
+            <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
+            <span>بحث</span>
           </button>
         </div>
       </div>
@@ -1388,6 +1405,7 @@
 
   <!-- HIDDEN PRINT CONTAINER FOR RECEIPT -->
   <div id="print-section" style="display: none;"></div>
+  <div id="thermalReceipt" class="d-none"></div>
 
   <!-- Application logic JS -->
   <script src="app.js"></script>
