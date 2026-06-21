@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>نظام المبيعات والمخازن الذكي</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     // Immediate check for persistent login and dark theme to avoid screen flash
     (function() {
@@ -33,6 +34,7 @@
   <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
   <!-- HTML5 QR Code Scanner Library -->
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
   <!-- Custom CSS for animations and layout overrides -->
   <link rel="stylesheet" href="styles.css">
   <style>
@@ -130,6 +132,8 @@
 
       <!-- Left Side: Add Button, Camera Icon, Purchase Button, and Cart Button -->
       <div class="flex items-center gap-2">
+        <button id="btnOpenVanModal" class="btn btn-warning d-none text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"><i class="fas fa-truck"></i> جرد البراد</button>
+        <button id="header-journey-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="خطة الزيارات"><i class="fa-solid fa-route text-lg"></i></button>
         <button id="header-add-btn" class="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors" title="إضافة سريعة">
           <i class="fa-solid fa-plus text-lg"></i>
         </button>
@@ -240,6 +244,10 @@
           <div class="flex items-center justify-between gap-3 pb-1">
             <label>حد تنبيه نفاذ المخزون (بالقطع):</label>
             <input type="number" id="lowStockThresholdInput" min="0" value="5" class="form-control w-20 bg-[#f4f6f5] text-gray-800 text-xs px-3 py-2.5 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold text-center">
+          </div>
+          <div class="form-check mt-3 mb-3" style="border: 1px solid #ccc; padding: 10px; border-radius: 5px;">
+            <input type="checkbox" id="vanModeToggle" class="form-check-input" style="float: right; margin-left: 10px;">
+            <label class="form-check-label" style="font-weight: bold;">تفعيل نظام جرد البراد المستقل (المندوبين)</label>
           </div>
           <div class="border-t border-gray-100 pt-3 select-none">
             <button id="btnArchiveDb" class="w-full py-3.5 bg-red-650 hover:bg-red-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-98 text-center">
@@ -1403,9 +1411,102 @@
     </div>
   </div>
 
+  <!-- VAN RECONCILIATION MODAL -->
+  <div id="vanModal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-lg mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <div class="flex justify-between items-center p-5 border-b border-gray-100 select-none">
+        <h3 class="text-sm font-black text-gray-900 flex items-center gap-1.5">
+          <i class="fas fa-truck text-[#1e5631]"></i>
+          <span>جرد البراد المستقل (Daily Van Reconciliation)</span>
+        </h3>
+        <button id="vanModalClose" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1 select-text space-y-4 no-scrollbar">
+        <div class="flex justify-between items-center select-none mb-2">
+          <span class="text-[10px] text-gray-400 font-bold">إدارة كميات التحميل والمبيعات اليومية للمندوب</span>
+          <button id="btnResetVanDay" class="px-3.5 py-2 bg-red-650 hover:bg-red-700 text-white text-[10px] font-extrabold rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer">
+            تصفير وبدء يوم جديد
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-right border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#f4f6f5] border-b border-gray-200 text-gray-600 font-black text-center">
+                <th class="py-2.5 px-2 text-right">المنتج</th>
+                <th class="py-2.5 px-2">التحميل الصباحي</th>
+                <th class="py-2.5 px-2">المبيعات</th>
+                <th class="py-2.5 px-2">المرتجعات</th>
+                <th class="py-2.5 px-2">المتوقع في البراد</th>
+              </tr>
+            </thead>
+            <tbody id="vanTableBody" class="divide-y divide-gray-100 font-semibold text-gray-700 text-center">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOURNEY MODAL -->
+  <div id="journey-modal" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 hidden select-none">
+    <div class="bg-white rounded-3xl shadow-2xl border border-gray-100 w-full max-w-md mx-auto overflow-hidden flex flex-col max-h-[85vh]">
+      <div class="flex justify-between items-center p-5 border-b border-gray-100">
+        <h3 class="text-sm font-black text-gray-900 flex items-center gap-2"><i class="fa-solid fa-map-location-dot text-[#1e5631]"></i> خطة الزيارات اليومية</h3>
+        <button id="journey-close" class="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-800"><i class="fa-solid fa-xmark text-sm"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1 flex flex-col gap-4 no-scrollbar">
+        <div class="bg-[#f4f6f5] p-4 rounded-2xl border border-gray-100 space-y-2">
+          <label class="text-[10px] font-black text-gray-400">إضافة محل للخطة</label>
+          <select id="journey-customer-select" class="w-full bg-white text-gray-800 text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none"></select>
+          <input type="text" id="journey-note-input" placeholder="ملاحظات أو طلبية المحل (اختياري)..." class="w-full bg-white text-gray-800 text-xs px-3 py-2 rounded-xl border border-gray-200 focus:outline-none mt-2">
+          <button id="journey-add-btn" class="w-full py-2.5 bg-[#1e5631] text-white text-xs font-bold rounded-xl mt-2">إضافة للمسار</button>
+        </div>
+        <div class="flex justify-between items-center text-[10px] font-bold text-gray-400 border-b border-gray-100 pb-1">
+          <span>المسار المرتب (اسحب لإعادة الترتيب)</span>
+          <button id="journey-clear-btn" class="text-red-500">مسح الكل</button>
+        </div>
+        <ul id="journey-list" class="space-y-2 pb-4"></ul>
+      </div>
+    </div>
+  </div>
+
   <!-- HIDDEN PRINT CONTAINER FOR RECEIPT -->
   <div id="print-section" style="display: none;"></div>
   <div id="thermalReceipt" class="d-none"></div>
+  
+  <div id="receiptTemplate" class="d-none" style="direction: rtl; width: 80mm; background: #fff; color: #000; font-family: sans-serif; padding: 5px;">
+    <div style="text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+      <h4 style="margin: 0; font-weight: bold;">شركة فستقه للمنتجات الغذائيه المحدوده</h4>
+      <p style="margin: 0;">البصره</p>
+      <p style="margin: 0; font-size: 12px;">07801406639 رقم الهاتف</p>
+      <h5 style="margin: 5px 0;" id="recInvoiceTitle">فاتوره بيع (----)</h5>
+    </div>
+    <table style="width: 100%; font-size: 12px; margin-bottom: 10px; border-collapse: collapse;">
+      <tr><td style="border: 1px solid #000; padding: 2px;">نوع الفاتوره</td><td style="border: 1px solid #000; padding: 2px;" id="recType">نقدا</td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px;">تاريخ الإنشاء</td><td style="border: 1px solid #000; padding: 2px;" id="recDate"></td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px;">اسم العميل</td><td style="border: 1px solid #000; padding: 2px;" id="recCustName"></td></tr>
+    </table>
+    <table style="width: 100%; font-size: 11px; margin-bottom: 10px; border-collapse: collapse; text-align: center;">
+      <thead>
+        <tr><th style="border: 1px solid #000;">#</th><th style="border: 1px solid #000;">اسم المنتج</th><th style="border: 1px solid #000;">السعر</th><th style="border: 1px solid #000;">الكمية</th><th style="border: 1px solid #000;">الاجمالي</th></tr>
+      </thead>
+      <tbody id="recItemsBody"></tbody>
+    </table>
+    <table style="width: 100%; font-size: 12px; margin-bottom: 10px; border-collapse: collapse;">
+      <tr><td style="border: 1px solid #000; padding: 2px; font-weight: bold;">الإجمالي</td><td style="border: 1px solid #000; padding: 2px;" id="recTotal"></td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px;">المدفوع</td><td style="border: 1px solid #000; padding: 2px;" id="recPaid"></td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px;">المتبقي</td><td style="border: 1px solid #000; padding: 2px;" id="recRemaining"></td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px; background: #eee;">رصيد سابق</td><td style="border: 1px solid #000; padding: 2px; background: #eee;" id="recOldDebt"></td></tr>
+      <tr><td style="border: 1px solid #000; padding: 2px; font-weight: bold; font-size: 14px;">المطلوب سداده</td><td style="border: 1px solid #000; padding: 2px; font-weight: bold; font-size: 14px;" id="recFinalDebt"></td></tr>
+    </table>
+    <div style="text-align: center; font-size: 11px; margin-top: 10px;">
+      <p style="margin: 0;">19/10 JEKOR جيكور</p>
+      <p style="margin: 0;">الخطأ والسهو مرجوع للطرفين</p>
+    </div>
+  </div>
 
   <!-- Application logic JS -->
   <script src="app.js"></script>

@@ -25,6 +25,8 @@ let returnCart = [];
 let activeReturnCustomer = null;
 let lastCompletedSale = null;
 let lastCompletedCustomer = null;
+let vanStock = JSON.parse(localStorage.getItem('posVanStock')) || {};
+let journeyPlan = JSON.parse(localStorage.getItem('posJourneyPlan')) || [];
 let users = [];
 let activeUser = null;
 const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
@@ -395,6 +397,7 @@ const saveAllStatesToLocalStorage = () => {
   localStorage.setItem('purchases', JSON.stringify(purchases));
   localStorage.setItem('suppliers', JSON.stringify(suppliers));
   localStorage.setItem('users', JSON.stringify(users));
+  localStorage.setItem('posJourneyPlan', JSON.stringify(journeyPlan));
 };
 
 const loadStatesFromLocalStorage = () => {
@@ -405,6 +408,7 @@ const loadStatesFromLocalStorage = () => {
   purchases = JSON.parse(localStorage.getItem('purchases') || '[]');
   suppliers = JSON.parse(localStorage.getItem('suppliers') || '[]');
   users = JSON.parse(localStorage.getItem('users') || '[]');
+  journeyPlan = JSON.parse(localStorage.getItem('posJourneyPlan')) || [];
 };
 
 // --- OPTIMISTIC UI BACKGROUND SYNC QUEUE ---
@@ -2605,6 +2609,127 @@ const closeInvoiceOptionsModal = () => {
   lastCompletedCustomer = null;
 };
 
+const populateReceiptTemplate = (saleData) => {
+  const subtotal = saleData.subtotal || saleData.totalAmount || 0;
+  const discount = saleData.discount || 0;
+  const netTotal = Math.max(0, subtotal - discount);
+  const received = saleData.receivedAmount || 0;
+  const remaining = Math.max(0, netTotal - received);
+
+  const titleEl = document.getElementById('recInvoiceTitle');
+  if (titleEl) titleEl.innerText = `فاتوره بيع (${saleData.invoiceId})`;
+
+  const typeEl = document.getElementById('recType');
+  if (typeEl) typeEl.innerText = remaining > 0 ? 'آجل' : 'نقدا';
+
+  const dateEl = document.getElementById('recDate');
+  if (dateEl) dateEl.innerText = saleData.date || new Date().toISOString().split('T')[0];
+
+  const custName = (lastCompletedCustomer && lastCompletedCustomer.name) || saleData.customerName || 'عميل عام';
+  const custNameEl = document.getElementById('recCustName');
+  if (custNameEl) custNameEl.innerText = custName;
+
+  const itemsBodyEl = document.getElementById('recItemsBody');
+  if (itemsBodyEl) {
+    let tbodyHtml = '';
+    (saleData.items || []).forEach((item, index) => {
+      const rowTotal = item.price * item.qty;
+      tbodyHtml += `
+        <tr>
+          <td style="border: 1px solid #000; padding: 2px;">${index + 1}</td>
+          <td style="border: 1px solid #000; padding: 2px; text-align: right;">${item.name}</td>
+          <td style="border: 1px solid #000; padding: 2px;">${item.price.toLocaleString()}</td>
+          <td style="border: 1px solid #000; padding: 2px;">${item.qty}</td>
+          <td style="border: 1px solid #000; padding: 2px;">${rowTotal.toLocaleString()}</td>
+        </tr>
+      `;
+    });
+    itemsBodyEl.innerHTML = tbodyHtml;
+  }
+
+  const totalEl = document.getElementById('recTotal');
+  if (totalEl) totalEl.innerText = `${netTotal.toLocaleString()} د.ع`;
+
+  const paidEl = document.getElementById('recPaid');
+  if (paidEl) paidEl.innerText = `${received.toLocaleString()} د.ع`;
+
+  const remainingEl = document.getElementById('recRemaining');
+  if (remainingEl) remainingEl.innerText = `${remaining.toLocaleString()} د.ع`;
+
+  let currentCustomerDebt = 0;
+  if (lastCompletedCustomer) {
+    const updatedCust = customers.find(c => c.id === lastCompletedCustomer.id || c.name === lastCompletedCustomer.name);
+    if (updatedCust) {
+      currentCustomerDebt = updatedCust.debt || 0;
+    } else {
+      currentCustomerDebt = lastCompletedCustomer.debt || 0;
+    }
+  }
+
+  const previousDebt = Math.max(0, currentCustomerDebt - remaining);
+  const finalDebt = previousDebt + remaining;
+
+  const oldDebtEl = document.getElementById('recOldDebt');
+  if (oldDebtEl) oldDebtEl.innerText = `${previousDebt.toLocaleString()} د.ع`;
+
+  const finalDebtEl = document.getElementById('recFinalDebt');
+  if (finalDebtEl) finalDebtEl.innerText = `${finalDebt.toLocaleString()} د.ع`;
+};
+
+const renderVanTable = () => {
+  const tbody = document.getElementById('vanTableBody');
+  if (!tbody) return;
+  
+  let html = '';
+  products.forEach(prod => {
+    if (!vanStock[prod.name]) {
+      vanStock[prod.name] = { loaded: 0, sold: 0, returned: 0, expected: 0 };
+    }
+    const item = vanStock[prod.name];
+    item.loaded = item.loaded || 0;
+    item.sold = item.sold || 0;
+    item.returned = item.returned || 0;
+    item.expected = item.loaded - item.sold + item.returned;
+    
+    html += `
+      <tr class="border-b border-gray-100">
+        <td class="py-2.5 px-2 text-right font-bold text-gray-800 text-xs">${prod.name}</td>
+        <td class="py-2.5 px-2">
+          <input type="number" min="0" value="${item.loaded}" data-product="${prod.name}" class="van-loaded-input w-20 text-center bg-[#f4f6f5] text-gray-800 text-xs px-2 py-1.5 rounded-xl border border-gray-150 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold">
+        </td>
+        <td class="py-2.5 px-2 font-semibold text-gray-700 text-xs">${item.sold}</td>
+        <td class="py-2.5 px-2 font-semibold text-gray-700 text-xs">${item.returned}</td>
+        <td class="py-2.5 px-2 font-black text-gray-900 text-xs expected-van-stock">${item.expected}</td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+};
+
+// Delegated listener for van loaded inputs
+document.addEventListener('input', (e) => {
+  if (e.target.classList.contains('van-loaded-input')) {
+    const productName = e.target.getAttribute('data-product');
+    const loadedVal = parseInt(e.target.value) || 0;
+    
+    vanStock[productName] = vanStock[productName] || { loaded: 0, sold: 0, returned: 0, expected: 0 };
+    vanStock[productName].loaded = loadedVal;
+    
+    const sold = vanStock[productName].sold || 0;
+    const returned = vanStock[productName].returned || 0;
+    const expected = loadedVal - sold + returned;
+    vanStock[productName].expected = expected;
+    
+    localStorage.setItem('posVanStock', JSON.stringify(vanStock));
+    
+    const row = e.target.closest('tr');
+    if (row) {
+      const expectedCell = row.querySelector('.expected-van-stock');
+      if (expectedCell) expectedCell.textContent = expected;
+    }
+  }
+});
+
 const generatePrintReceipt = (sale, customer) => {
   const customerName = customer ? customer.name : 'عميل عام';
   const customerPhone = customer && customer.phone ? customer.phone : 'غير متوفر';
@@ -3614,6 +3739,15 @@ if (retSubmitBtn) {
       }
     }
 
+    if (localStorage.getItem('vanModeEnabled') === 'true') {
+      payloadItems.forEach(item => {
+        vanStock[item.name] = vanStock[item.name] || { loaded: 0, sold: 0, returned: 0, expected: 0 };
+        vanStock[item.name].returned = (vanStock[item.name].returned || 0) + parseInt(item.qty);
+        vanStock[item.name].expected = (vanStock[item.name].loaded || 0) - (vanStock[item.name].sold || 0) + vanStock[item.name].returned;
+      });
+      localStorage.setItem('posVanStock', JSON.stringify(vanStock));
+    }
+
     saveAllStatesToLocalStorage();
     closeAddReturnModal();
     showArabicToast("تم تسجيل المرتجع وتحديث المخزن بنجاح!", "success");
@@ -4173,6 +4307,15 @@ if (checkoutConfirmBtn) {
         sellerName: activeUser ? activeUser['اسم المستخدم'] : 'بائع عام'
       };
 
+      if (localStorage.getItem('vanModeEnabled') === 'true') {
+        cartArray.forEach(item => {
+          vanStock[item.name] = vanStock[item.name] || { loaded: 0, sold: 0, returned: 0, expected: 0 };
+          vanStock[item.name].sold = (vanStock[item.name].sold || 0) + parseInt(item.qty);
+          vanStock[item.name].expected = (vanStock[item.name].loaded || 0) - vanStock[item.name].sold + (vanStock[item.name].returned || 0);
+        });
+        localStorage.setItem('posVanStock', JSON.stringify(vanStock));
+      }
+
       cart = [];
       localStorage.removeItem('posCart');
       updateCartBadge();
@@ -4181,7 +4324,6 @@ if (checkoutConfirmBtn) {
       closeCheckoutModal();
       saveAllStatesToLocalStorage();
       openInvoiceOptionsModal(saleObject, customer);
-      printThermalReceipt(saleObject);
 
       if (!navigator.onLine) {
         syncQueue.push({
@@ -4247,10 +4389,26 @@ if (invoiceOptionsModal) {
 if (optPrintBtn) {
   optPrintBtn.addEventListener('click', () => {
     if (!lastCompletedSale) return;
-    if (printSection) {
-      printSection.innerHTML = generatePrintReceipt(lastCompletedSale, lastCompletedCustomer);
+    populateReceiptTemplate(lastCompletedSale);
+    const receiptTemplate = document.getElementById('receiptTemplate');
+    if (receiptTemplate) {
+      receiptTemplate.classList.remove('d-none');
+      const opt = {
+        margin: 1,
+        filename: 'Invoice_' + lastCompletedSale.invoiceId + '.pdf',
+        image: { type: 'jpeg', quality: 1 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: [80, 200], orientation: 'portrait' }
+      };
+      html2pdf().set(opt).from(receiptTemplate).save()
+        .then(() => {
+          receiptTemplate.classList.add('d-none');
+        })
+        .catch(err => {
+          console.error("PDF generation failed:", err);
+          receiptTemplate.classList.add('d-none');
+        });
     }
-    window.print();
     closeInvoiceOptionsModal();
   });
 }
@@ -4260,6 +4418,42 @@ if (optWhatsappBtn) {
     if (!lastCompletedSale) return;
     sendInvoiceWhatsApp(lastCompletedSale, lastCompletedCustomer);
     closeInvoiceOptionsModal();
+  });
+}
+
+const btnOpenVanModal = document.getElementById('btnOpenVanModal');
+const vanModal = document.getElementById('vanModal');
+const vanModalClose = document.getElementById('vanModalClose');
+const btnResetVanDay = document.getElementById('btnResetVanDay');
+
+if (btnOpenVanModal && vanModal) {
+  btnOpenVanModal.addEventListener('click', () => {
+    vanModal.classList.remove('hidden');
+    renderVanTable();
+  });
+}
+
+if (vanModalClose && vanModal) {
+  vanModalClose.addEventListener('click', () => {
+    vanModal.classList.add('hidden');
+  });
+}
+
+if (vanModal) {
+  vanModal.addEventListener('click', (e) => {
+    if (e.target === vanModal) {
+      vanModal.classList.add('hidden');
+    }
+  });
+}
+
+if (btnResetVanDay) {
+  btnResetVanDay.addEventListener('click', () => {
+    if (confirm("هل أنت متأكد من تصفير جرد البراد وبدء يوم جديد؟")) {
+      vanStock = {};
+      localStorage.removeItem('posVanStock');
+      renderVanTable();
+    }
   });
 }
 
@@ -4376,8 +4570,6 @@ const closeSmartAiModal = () => {
 
 let recognition = null;
 let isRecording = false;
-let isRetryingSpeech = false;
-let hasRetriedOnNetworkError = false;
 let liveSpeechOverlay = null;
 
 const createLiveSpeechOverlay = () => {
@@ -4425,10 +4617,104 @@ const destroyLiveSpeechOverlay = () => {
   }
 };
 
-const processSmartVoice = async (transcript) => {
+const processAiOrder = (aiOrder) => {
+  const aiData = aiOrder;
+  const customerNameInput = aiData.customer || aiData.customerName || '';
+  if (customerNameInput) {
+    const matchedCust = customers.find(c => {
+      if (!c.shopName) c.shopName = c.name || '';
+      return c.shopName.includes(aiData.customer) || aiData.customer.includes(c.shopName);
+    });
+    if (matchedCust) {
+      toggleQuickCustomerMode(false);
+      if (checkoutCustomerSelect) {
+        checkoutCustomerSelect.value = matchedCust.id;
+      }
+      if (customCustomerDropdownLabel) {
+        customCustomerDropdownLabel.textContent = `${matchedCust.name} (${matchedCust.address})`;
+      }
+    } else {
+      toggleQuickCustomerMode(true);
+      if (checkoutQuickCustomerName) {
+        checkoutQuickCustomerName.value = customerNameInput;
+      }
+      showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerNameInput}"`, "info");
+    }
+  }
+
+  // Clear current active shopping cart first
+  cart.forEach(item => {
+    const prod = inventory.find(p => p.id === item.productId);
+    if (prod) {
+      prod.qty += item.qty;
+      prod.quantity += item.qty;
+    }
+  });
+  cart = [];
+
+  const items = aiData.items || [];
+  items.forEach(item => {
+    const matchedProd = products.find(p => p.name.includes(item.name) || item.name.includes(p.name));
+    if (matchedProd) {
+      const qtyToAdd = parseInt(item.qty) || 1;
+      const actualQty = Math.min(matchedProd.quantity, qtyToAdd);
+      if (actualQty > 0) {
+        matchedProd.qty -= actualQty;
+        matchedProd.quantity -= actualQty;
+        cart.push({
+          productId: matchedProd.id,
+          qty: actualQty,
+          price: matchedProd.price
+        });
+        if (actualQty < qtyToAdd) {
+          showArabicToast(`تمت إضافة ${actualQty} فقط من "${matchedProd.name}" لنفاد المخزون`, "info");
+        }
+      } else {
+        showArabicToast(`المنتج "${matchedProd.name}" نفد من المخزن!`, "error");
+      }
+    } else {
+      showArabicToast(`لم يتم العثور على منتج باسم "${item.name}"`, "error");
+    }
+  });
+
+  updateCartBadge();
+  renderSalesGrid();
+  renderCartRows();
+  saveCartState();
+
+  // Open modal using Bootstrap or jQuery as requested, otherwise fallback to custom method
+  let modalOpened = false;
+  if (typeof bootstrap !== 'undefined') {
+    try {
+      new bootstrap.Modal(document.getElementById('checkoutModal') || document.getElementById('checkout-modal')).show();
+      modalOpened = true;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  if (!modalOpened && typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+    try {
+      $('#checkoutModal').modal('show');
+      $('#checkout-modal').modal('show');
+      modalOpened = true;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  if (!modalOpened) {
+    openCheckoutModal(true);
+  }
+
+  showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
+};
+
+const handleVoiceSubmit = async (transcript) => {
+  stopRecording();
   const sanitizedText = String(transcript).trim().replace(/\s+/g, ' ');
   if (!sanitizedText) return;
-  showArabicToast('جاري تحليل الصوت بذكاء...', 'info');
+
+  if (aiLoadingState) aiLoadingState.classList.remove('hidden');
+
   try {
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
@@ -4442,117 +4728,71 @@ const processSmartVoice = async (transcript) => {
       }),
       redirect: 'follow'
     });
-    
+
     const result = await response.json();
     console.log("Smart voice response result:", result);
-    
+
     if (result.status === "error") {
       alert("خطأ من السيرفر: " + result.message);
       return;
     }
 
     if (result.status === "success") {
-      const data = result.aiData || result;
-
-      const customerName = data.customer || data.customerName;
-      if (customerName) {
-        const match = customers.find(c => 
-          c.name.toLowerCase().includes(customerName.toLowerCase()) ||
-          customerName.toLowerCase().includes(c.name.toLowerCase())
-        );
-        if (match) {
-          toggleQuickCustomerMode(false);
-          checkoutCustomerSelect.value = match.id;
-          if (customCustomerDropdownLabel) {
-            customCustomerDropdownLabel.textContent = `${match.name} (${match.address})`;
-          }
-        } else {
-          toggleQuickCustomerMode(true);
-          if (checkoutQuickCustomerName) {
-            checkoutQuickCustomerName.value = customerName;
-          }
-          showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerName}"`, "info");
+      let aiData = result.aiData;
+      if (typeof aiData === 'string') {
+        let cleanJson = aiData.trim();
+        if (cleanJson.startsWith('```json')) {
+          cleanJson = cleanJson.substring(7);
+        } else if (cleanJson.startsWith('```')) {
+          cleanJson = cleanJson.substring(3);
+        }
+        if (cleanJson.endsWith('```')) {
+          cleanJson = cleanJson.substring(0, cleanJson.length - 3);
+        }
+        cleanJson = cleanJson.trim();
+        try {
+          aiData = JSON.parse(cleanJson);
+        } catch (e) {
+          console.error("Failed to parse aiData:", e);
         }
       }
 
-      const items = data.items;
-      if (items && Array.isArray(items) && items.length > 0) {
-        cart.forEach(item => {
-          const prod = inventory.find(p => p.id === item.productId);
-          if (prod) {
-            prod.qty += item.qty;
-            prod.quantity += item.qty;
-          }
-        });
-        cart = [];
-
-        items.forEach(aiItem => {
-          const prod = inventory.find(p => 
-            p.name.toLowerCase().includes(aiItem.name.toLowerCase()) ||
-            aiItem.name.toLowerCase().includes(p.name.toLowerCase())
-          );
-          if (prod) {
-            const qtyToAdd = parseInt(aiItem.qty) || 1;
-            const actualQty = Math.min(prod.quantity, qtyToAdd);
-            if (actualQty > 0) {
-              prod.qty -= actualQty;
-              prod.quantity -= actualQty;
-              cart.push({
-                productId: prod.id,
-                qty: actualQty
-              });
-              if (actualQty < qtyToAdd) {
-                showArabicToast(`تمت إضافة ${actualQty} فقط من "${prod.name}" لنفاد المخزون`, "info");
-              }
-            } else {
-              showArabicToast(`المنتج "${prod.name}" نفد من المخزن!`, "error");
-            }
-          } else {
-            showArabicToast(`لم يتم العثور على منتج باسم "${aiItem.name}"`, "error");
-          }
-        });
-
-        updateCartBadge();
-        renderSalesGrid();
-        renderCartRows();
-        saveCartState();
+      if (aiData) {
+        processAiOrder(aiData);
       }
-
-      let sum = 0;
-      cart.forEach(item => {
-        const prod = inventory.find(p => p.id === item.productId);
-        if (prod) sum += prod.price * item.qty;
-      });
-      if (checkoutSubtotalVal) checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
-      if (checkoutFinalVal) checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
-      triggerCheckoutPricingRefresh();
-
-      openCheckoutModal(true);
-      showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
     } else {
       alert("استجابة غير معروفة من السيرفر");
     }
-
   } catch (err) {
     console.error("Smart voice processing error:", err);
     showArabicToast("فشل الاتصال بالذكاء الاصطناعي: " + err.message, "error");
-    alert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
+  } finally {
+    if (aiLoadingState) aiLoadingState.classList.add('hidden');
   }
 };
 
-const initSpeechRecognition = () => {
+const startRecording = async () => {
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+  } catch (err) {
+    console.error("Microphone permission denied:", err);
+    showArabicToast("يجب السماح بالوصول إلى الميكروفون لاستخدام هذه الميزة", "error");
+    return;
+  }
+
   try {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      console.warn("Web Speech API is not supported in this browser.");
+      showArabicToast("تصفحك لا يدعم ميزة التعرف على الصوت", "error");
       return;
     }
 
     recognition = new SpeechRecognition();
+    recognition.lang = 'ar-IQ';
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 3;
-    recognition.lang = 'ar-IQ';
 
     recognition.onstart = () => {
       isRecording = true;
@@ -4560,10 +4800,7 @@ const initSpeechRecognition = () => {
       if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
       if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
       if (aiMicBtn) {
-        aiMicBtn.classList.add('bg-red-50', 'text-red-650', 'border-red-200', 'recording');
-      }
-      if (salesMicBtn) {
-        salesMicBtn.classList.add('recording');
+        aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
       }
     };
 
@@ -4586,69 +4823,25 @@ const initSpeechRecognition = () => {
         const finalText = event.results[0][0].transcript.trim();
         if (finalText) {
           recognition.stop();
-          stopRecording();
-          processSmartVoice(finalText);
+          handleVoiceSubmit(finalText);
         }
       }
     };
 
     recognition.onerror = (event) => {
-      console.error("Speech recognition error event details:", event.error, event);
+      console.error("Speech error event:", event);
       stopRecording();
-      alert("حدث خطأ في التعرف على الصوت: " + event.error);
+      showArabicToast("حدث خطأ في التعرف على الصوت: " + event.error, "error");
     };
 
     recognition.onend = () => {
-      if (isRecording) {
-        try {
-          recognition.start();
-        } catch (e) {
-          console.warn("Speech recognition restart failed:", e);
-          stopRecording();
-        }
-      } else {
-        stopRecording();
-      }
-    };
-  } catch (error) {
-    console.error("Speech recognition initialization failed:", error);
-    showArabicToast("فشل تهيئة التعرف على الصوت", "error");
-  }
-};
-
-const startRecording = async () => {
-  try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-    }
-  } catch (err) {
-    console.error("Microphone permission denied or error:", err);
-    showArabicToast("يجب السماح بالوصول إلى الميكروفون لاستخدام هذه الميزة", "error");
-    stopRecording();
-    return;
-  }
-
-  hasRetriedOnNetworkError = false;
-  isRetryingSpeech = false;
-
-  if (!recognition) {
-    initSpeechRecognition();
-  }
-
-  if (aiMicBtnText) aiMicBtnText.textContent = 'جاري تهيئة الميكروفون...';
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  if (recognition) {
-    try {
-      createLiveSpeechOverlay();
-      recognition.start();
-    } catch (e) {
-      console.error("Speech recognition start failed:", e);
-      showArabicToast("فشل بدء التعرف على الصوت: " + e.message, "error");
       stopRecording();
-    }
-  } else {
-    showArabicToast("تصفحك لا يدعم ميزة التعرف على الصوت", "error");
+    };
+
+    recognition.start();
+
+  } catch (error) {
+    console.error("Speech recognition start failed:", error);
   }
 };
 
@@ -4659,10 +4852,7 @@ const stopRecording = () => {
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
   if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
   if (aiMicBtn) {
-    aiMicBtn.classList.remove('bg-red-50', 'text-red-650', 'border-red-200', 'recording');
-  }
-  if (salesMicBtn) {
-    salesMicBtn.classList.remove('recording');
+    aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
   }
   if (recognition) {
     try {
@@ -5278,6 +5468,230 @@ if (headerLogoutBtn) {
 
 // --- VISIBILITY CHANGE & GLOBAL LISTENERS ---
 
+// --- SMART JOURNEY PLAN (DAILY ROUTE MANAGER) ---
+const renderJourneyPlan = () => {
+  const journeyList = document.getElementById('journey-list');
+  if (!journeyList) return;
+  journeyList.innerHTML = '';
+  
+  if (journeyPlan.length === 0) {
+    journeyList.innerHTML = `<div class="text-center py-6 text-xs text-gray-400 font-bold">لا توجد زيارات مضافة للمسار اليوم.</div>`;
+    return;
+  }
+  
+  journeyPlan.forEach((item, index) => {
+    const li = document.createElement('li');
+    li.className = "flex items-center justify-between bg-[#f4f6f5] hover:bg-[#e8ecea] p-3 rounded-2xl border border-gray-150 transition-colors shadow-sm gap-2";
+    li.setAttribute('data-index', index);
+    li.innerHTML = `
+      <div class="flex items-center gap-2 flex-grow min-w-0">
+        <span class="drag-handle cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 px-1 text-sm"><i class="fa-solid fa-bars"></i></span>
+        <span class="w-5 h-5 rounded-full bg-[#1e5631] text-white flex items-center justify-center text-[10px] font-black shrink-0">${index + 1}</span>
+        <div class="flex flex-col min-w-0 leading-tight text-right">
+          <span class="text-xs font-black text-gray-900 truncate">${item.customerName}</span>
+          ${item.note ? `<span class="text-[9px] text-gray-500 font-bold truncate mt-0.5"><i class="fa-solid fa-comment-dots text-gray-400 ml-1"></i>${item.note}</span>` : ''}
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button class="journey-details-btn px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 text-[10px] font-bold rounded-lg transition-colors cursor-pointer">التفاصيل</button>
+        <button class="journey-remove-btn w-7 h-7 text-red-500 hover:text-red-700 flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-trash-can text-xs"></i></button>
+      </div>
+    `;
+    
+    // Details action
+    li.querySelector('.journey-details-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      showJourneyCustomerDetails(index);
+    });
+    
+    // Remove action
+    li.querySelector('.journey-remove-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      journeyPlan.splice(index, 1);
+      localStorage.setItem('posJourneyPlan', JSON.stringify(journeyPlan));
+      renderJourneyPlan();
+      showArabicToast("تمت إزالة المحل من الخطة", "info");
+    });
+    
+    journeyList.appendChild(li);
+  });
+  
+  initJourneySortable();
+};
+
+const initJourneySortable = () => {
+  const journeyList = document.getElementById('journey-list');
+  if (!journeyList || !window.Sortable) return;
+  
+  if (journeyList._sortable) {
+    journeyList._sortable.destroy();
+  }
+  
+  journeyList._sortable = new Sortable(journeyList, {
+    handle: '.drag-handle',
+    animation: 150,
+    onEnd: (evt) => {
+      const oldIdx = evt.oldIndex;
+      const newIdx = evt.newIndex;
+      if (oldIdx !== undefined && newIdx !== undefined && oldIdx !== newIdx) {
+        const movedItem = journeyPlan.splice(oldIdx, 1)[0];
+        journeyPlan.splice(newIdx, 0, movedItem);
+        localStorage.setItem('posJourneyPlan', JSON.stringify(journeyPlan));
+        renderJourneyPlan();
+      }
+    }
+  });
+};
+
+const showJourneyCustomerDetails = (index) => {
+  const item = journeyPlan[index];
+  if (!item) return;
+  
+  const cust = customers.find(c => c.name === item.customerName);
+  const debt = cust ? cust.debt : 0;
+  
+  const custSales = salesHistory.filter(s => s.customerName === item.customerName && s.status !== 'تسديد دفعة');
+  let lastInvoiceInfo = 'لا يوجد فواتير سابقة';
+  if (custSales.length > 0) {
+    const lastInv = custSales[custSales.length - 1];
+    lastInvoiceInfo = `${lastInv.date} - إجمالي: ${lastInv.totalAmount.toLocaleString()} د.ع (رقم: ${lastInv.invoiceId})`;
+  }
+  
+  const hasGps = cust && cust.Latitude && cust.Longitude && cust.Latitude !== 0 && cust.Longitude !== 0;
+  
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-modal-backdrop';
+  
+  const modal = document.createElement('div');
+  modal.className = 'custom-modal-window p-6 space-y-4';
+  
+  let gpsButtonHtml = '';
+  if (hasGps) {
+    gpsButtonHtml = `
+      <a href="https://www.google.com/maps/dir/?api=1&destination=${cust.Latitude},${cust.Longitude}" target="_blank" class="w-full py-3.5 bg-[#1e5631] hover:bg-[#163e23] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-all active:scale-98">
+        <i class="fa-solid fa-map-pin"></i>
+        <span>📍 فتح في خرائط جوجل (توجيهات GPS)</span>
+      </a>
+    `;
+  } else {
+    gpsButtonHtml = `
+      <button class="w-full py-3.5 bg-gray-100 text-gray-400 font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-not-allowed border border-gray-200" disabled>
+        <i class="fa-solid fa-location-dot"></i>
+        <span>الموقع الجغرافي غير متوفر</span>
+      </button>
+    `;
+  }
+  
+  modal.innerHTML = `
+    <div class="w-12 h-12 rounded-2xl bg-[#e8ecea] text-[#1e5631] flex items-center justify-center text-xl mx-auto shadow-sm">
+      <i class="fa-solid fa-route"></i>
+    </div>
+    <div class="space-y-3 w-full text-right leading-relaxed select-text">
+      <h3 class="font-black text-gray-900 text-sm text-center">${item.customerName}</h3>
+      
+      <div class="bg-gray-50 p-4.5 rounded-2xl border border-gray-150 space-y-2.5 text-xs font-semibold text-gray-700">
+        <div class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+          <span class="text-gray-450 font-bold text-[10px] ml-2">ملاحظات المحل:</span>
+          <span class="text-gray-900">${item.note || 'لا توجد ملاحظات'}</span>
+        </div>
+        
+        <div class="flex justify-between items-center border-b border-gray-100 pb-1.5">
+          <span class="text-gray-450 font-bold text-[10px] ml-2">الدين الحالي للمحل:</span>
+          <span class="text-red-600 font-black">${debt.toLocaleString()} د.ع</span>
+        </div>
+        
+        <div class="flex flex-col gap-1 text-right">
+          <span class="text-gray-450 font-bold text-[10px]">آخر فاتورة:</span>
+          <span class="text-gray-800 text-[11px] font-black">${lastInvoiceInfo}</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="space-y-2 w-full mt-2">
+      ${gpsButtonHtml}
+      <button id="journey-detail-close" class="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer active:scale-98 transition-all">
+        إغلاق
+      </button>
+    </div>
+  `;
+  
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+  
+  requestAnimationFrame(() => {
+    backdrop.classList.add('active');
+  });
+  
+  const close = () => {
+    backdrop.classList.remove('active');
+    setTimeout(() => {
+      backdrop.remove();
+    }, 250);
+  };
+  
+  modal.querySelector('#journey-detail-close').addEventListener('click', close);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
+};
+
+// Wire modal event listeners
+const headerJourneyBtn = document.getElementById('header-journey-btn');
+const journeyModal = document.getElementById('journey-modal');
+const journeyClose = document.getElementById('journey-close');
+const journeyCustomerSelect = document.getElementById('journey-customer-select');
+const journeyNoteInput = document.getElementById('journey-note-input');
+const journeyAddBtn = document.getElementById('journey-add-btn');
+const journeyClearBtn = document.getElementById('journey-clear-btn');
+
+if (headerJourneyBtn && journeyModal) {
+  headerJourneyBtn.addEventListener('click', () => {
+    journeyModal.classList.remove('hidden');
+    if (journeyCustomerSelect) {
+      journeyCustomerSelect.innerHTML = customers.map(c => `<option value="${c.name}">${c.name} (${c.address})</option>`).join('');
+    }
+    renderJourneyPlan();
+  });
+}
+if (journeyClose && journeyModal) {
+  journeyClose.addEventListener('click', () => {
+    journeyModal.classList.add('hidden');
+  });
+}
+if (journeyModal) {
+  journeyModal.addEventListener('click', (e) => {
+    if (e.target === journeyModal) {
+      journeyModal.classList.add('hidden');
+    }
+  });
+}
+if (journeyAddBtn) {
+  journeyAddBtn.addEventListener('click', () => {
+    const custName = journeyCustomerSelect ? journeyCustomerSelect.value : '';
+    const note = journeyNoteInput ? journeyNoteInput.value.trim() : '';
+    if (!custName) {
+      showArabicToast('الرجاء اختيار عميل أولاً', 'error');
+      return;
+    }
+    journeyPlan.push({ customerName: custName, note: note });
+    localStorage.setItem('posJourneyPlan', JSON.stringify(journeyPlan));
+    if (journeyNoteInput) journeyNoteInput.value = '';
+    renderJourneyPlan();
+    showArabicToast('تمت إضافة المحل إلى المسار اليومي', 'success');
+  });
+}
+if (journeyClearBtn) {
+  journeyClearBtn.addEventListener('click', async () => {
+    if (journeyPlan.length === 0) return;
+    if (await showCustomConfirm('هل أنت متأكد من مسح جميع الزيارات من المسار اليومي؟')) {
+      journeyPlan = [];
+      localStorage.removeItem('posJourneyPlan');
+      renderJourneyPlan();
+      showArabicToast('تم مسح مسار الزيارات بالكامل', 'info');
+    }
+  });
+}
+
 // --- INITIALIZER STARTUP ---
 const initApp = () => {
   const storedUser = localStorage.getItem('activeUser');
@@ -5311,6 +5725,33 @@ const initApp = () => {
     localStorage.setItem('lowStockThreshold', e.target.value);
     renderProductsList();
   });
+
+  const vanModeToggle = document.getElementById('vanModeToggle');
+  const btnOpenVanModal = document.getElementById('btnOpenVanModal');
+  const isVanModeEnabled = localStorage.getItem('vanModeEnabled') === 'true';
+
+  if (vanModeToggle) {
+    vanModeToggle.checked = isVanModeEnabled;
+    vanModeToggle.addEventListener('change', (e) => {
+      const enabled = e.target.checked;
+      localStorage.setItem('vanModeEnabled', enabled);
+      if (btnOpenVanModal) {
+        if (enabled) {
+          btnOpenVanModal.classList.remove('d-none');
+        } else {
+          btnOpenVanModal.classList.add('d-none');
+        }
+      }
+    });
+  }
+
+  if (btnOpenVanModal) {
+    if (isVanModeEnabled) {
+      btnOpenVanModal.classList.remove('d-none');
+    } else {
+      btnOpenVanModal.classList.add('d-none');
+    }
+  }
   
   renderInventoryList();
   renderCustomersList();
