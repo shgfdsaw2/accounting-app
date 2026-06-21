@@ -1387,11 +1387,20 @@ const openInvoiceDetailsModal = (invoice) => {
 
   if (detailPrintBtn) {
     detailPrintBtn.onclick = () => {
-      const cust = customers.find(c => c.name === invoice.customerName);
-      if (printSection) {
-        printSection.innerHTML = generatePrintReceipt(invoice, cust);
+      const sale = salesHistory.find(s => s.invoiceId === detailInvoiceId.textContent) || salesHistory.find(s => getShortInvoiceId(s.invoiceId) === detailInvoiceId.textContent) || invoice;
+      if(!sale) return;
+      populateReceiptTemplate(sale);
+      const receiptTemplate = document.getElementById('receiptTemplate');
+      if (receiptTemplate) {
+        document.body.classList.add('thermal-print-mode');
+        receiptTemplate.classList.remove('d-none');
+        setTimeout(() => {
+          window.print();
+          receiptTemplate.classList.add('d-none');
+          document.body.classList.remove('thermal-print-mode');
+        }, 300);
       }
-      window.print();
+      closeInvoiceDetailsModal();
     };
   }
 
@@ -4392,22 +4401,13 @@ if (optPrintBtn) {
     populateReceiptTemplate(lastCompletedSale);
     const receiptTemplate = document.getElementById('receiptTemplate');
     if (receiptTemplate) {
+      document.body.classList.add('thermal-print-mode');
       receiptTemplate.classList.remove('d-none');
-      const opt = {
-        margin: 1,
-        filename: 'Invoice_' + lastCompletedSale.invoiceId + '.pdf',
-        image: { type: 'jpeg', quality: 1 },
-        html2canvas: { scale: 2 },
-        jsPDF: { unit: 'mm', format: [80, 200], orientation: 'portrait' }
-      };
-      html2pdf().set(opt).from(receiptTemplate).save()
-        .then(() => {
-          receiptTemplate.classList.add('d-none');
-        })
-        .catch(err => {
-          console.error("PDF generation failed:", err);
-          receiptTemplate.classList.add('d-none');
-        });
+      setTimeout(() => {
+        window.print();
+        receiptTemplate.classList.add('d-none');
+        document.body.classList.remove('thermal-print-mode');
+      }, 300);
     }
     closeInvoiceOptionsModal();
   });
