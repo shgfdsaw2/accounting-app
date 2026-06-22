@@ -4571,141 +4571,287 @@ const closeSmartAiModal = () => {
 let recognition = null;
 let isRecording = false;
 let liveSpeechOverlay = null;
+let _silenceTimer = null;
+let _accumulatedTranscript = '';
+const SILENCE_TIMEOUT_MS = 2200; 
 
 const createLiveSpeechOverlay = () => {
   let overlay = document.getElementById('live-speech-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'live-speech-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.bottom = '100px';
-    overlay.style.left = '50%';
-    overlay.style.transform = 'translate3d(-50%, 0, 0)';
-    overlay.style.background = 'rgba(0, 0, 0, 0.85)';
-    overlay.style.color = '#fff';
-    overlay.style.padding = '12px 24px';
-    overlay.style.borderRadius = '25px';
-    overlay.style.zIndex = '99999';
-    overlay.style.textAlign = 'center';
-    overlay.style.fontSize = '14px';
-    overlay.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
-    overlay.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-    overlay.style.willChange = 'opacity, transform';
-    overlay.style.pointerEvents = 'none';
+    overlay.style.cssText = [
+      'position:fixed','bottom:110px','left:50%',
+      'transform:translate3d(-50%,0,0)',
+      'background:rgba(0,0,0,0.86)','color:#fff',
+      'padding:12px 22px','border-radius:25px','z-index:99999',
+      'text-align:center','font-size:14px','font-family:Cairo,sans-serif',
+      'direction:rtl','max-width:88vw','word-break:break-word',
+      'box-shadow:0 4px 18px rgba(0,0,0,0.35)',
+      'transition:opacity 0.25s ease','pointer-events:none'
+    ].join(';');
     document.body.appendChild(overlay);
   }
-  overlay.textContent = 'تحدث الآن...';
+  overlay.textContent = '🎙️ تحدث الآن...';
   overlay.style.display = 'block';
   overlay.style.opacity = '1';
 };
 
 const updateLiveSpeechText = (text) => {
   const overlay = document.getElementById('live-speech-overlay');
-  if (overlay && text.trim()) {
-    overlay.textContent = text;
-  }
+  if (overlay && text && text.trim()) overlay.textContent = text;
 };
 
 const destroyLiveSpeechOverlay = () => {
   const overlay = document.getElementById('live-speech-overlay');
   if (overlay) {
-    overlay.textContent = '';
-    overlay.style.display = 'none';
-    if (overlay.parentNode) {
-      overlay.parentNode.removeChild(overlay);
-    }
+    overlay.style.opacity = '0';
+    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
   }
 };
 
+const _levenshtein = (a, b) => {
+  const la = a.length, lb = b.length;
+  if (la === 0) return lb;
+  if (lb === 0) return la;
+  const dp = Array.from({ length: la + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= lb; j++) dp[0][j] = j;
+  for (let i = 1; i <= la; i++) {
+    for (let j = 1; j <= lb; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[la][lb];
+};
+
+const _levSim = (a, b) => {
+  if (!a || !b) return 0;
+  const maxLen = Math.max(a.length, b.length);
+  if (maxLen === 0) return 1;
+  return 1 - _levenshtein(a, b) / maxLen;
+};
+
+const _tokenSetSim = (a, b) => {
+  const tokensA = new Set(a.split(/\s+/).filter(Boolean));
+  const tokensB = new Set(b.split(/\s+/).filter(Boolean));
+  let intersection = 0;
+  tokensA.forEach(t => { if (tokensB.has(t)) intersection++; });
+  const union = tokensA.size + tokensB.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+};
+
+const IRAQ_DIALECT_MAP = [
+  [/برغر لحم|برجر لحم/g, 'برغر لحم'],
+  [/برغر|برجر/g, 'برغر'],
+  [/كرسبي|كريسبي/g, 'كرسبي'],
+  [/كولا|كوكاكولا|كوكا/g, 'كولا'],
+  [/بيبسي|بيبس/g, 'بيبسي'],
+  [/سفن آب|سفن أب|٧آب/g, 'سفن اب'],
+  [/شيبس|شبس|شيبز/g, 'شيبس'],
+  [/ماء|ماي|ميه|مية/g, 'ماء'],
+  [/عصير|عسير/g, 'عصير'],
+  [/جبن|جبنة/g, 'جبن'],
+  [/كيك|كعك/g, 'كيك'],
+  [/بسكويت|بسكت/g, 'بسكويت'],
+  [/شاي|چاي/g, 'شاي'],
+  [/نسكافيه|نسكافيه|نسكافي/g, 'نسكافيه'],
+  [/حليب|حلبيب|لبن/g, 'حليب'],
+  [/زيت|دهن|دهون/g, 'زيت'],
+  [/سكر|سكّر/g, 'سكر'],
+  [/طحين|دقيق/g, 'طحين'],
+  [/رز|أرز|رزة/g, 'رز'],
+  [/معجون|معجنون|معجن/g, 'معجون'],
+  [/صلصة|صلصه/g, 'صلصة'],
+  [/مرطبات|مشروبات/g, 'مشروبات'],
+  [/علبة|علبه/g, 'علبة'],
+  [/كارتون|كرتون|كرتونه|كارتونه/g, 'كرتون'],
+];
+
+const _normalizeArabic = (str) => {
+  if (!str) return '';
+  let s = str
+    .trim()
+    .toLowerCase()
+    .replace(/أ|إ|آ/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/[ًٌٍَُِّْ]/g, '') 
+    .replace(/\s+/g, ' ');
+  IRAQ_DIALECT_MAP.forEach(([pattern, replacement]) => {
+    s = s.replace(pattern, replacement);
+  });
+  return s;
+};
+
+const FUZZY_THRESHOLD = 0.45;
+
+const fuzzyFindProduct = (spokenName) => {
+  if (!spokenName || !inventory || inventory.length === 0) return null;
+  const normSpoken = _normalizeArabic(spokenName);
+  let bestProduct = null;
+  let bestScore = -1;
+
+  inventory.forEach(prod => {
+    const normProd = _normalizeArabic(prod.name);
+    let score = 0;
+    if (normProd === normSpoken) {
+      score = 1.0;
+    } else if (normProd.includes(normSpoken) || normSpoken.includes(normProd)) {
+      const overlapLen = Math.min(normProd.length, normSpoken.length);
+      score = overlapLen >= 2 ? 0.88 + (overlapLen / 100) : 0;
+    } else {
+      const tss = _tokenSetSim(normProd, normSpoken);
+      const lev = _levSim(normProd, normSpoken);
+      const prodTokens = normProd.split(' ').filter(Boolean);
+      const spkTokens  = normSpoken.split(' ').filter(Boolean);
+      let crossLev = 0;
+      spkTokens.forEach(st => {
+        prodTokens.forEach(pt => {
+          const s = _levSim(st, pt);
+          if (s > crossLev) crossLev = s;
+        });
+      });
+      score = Math.max(tss * 0.45 + lev * 0.35 + crossLev * 0.2, tss, crossLev > 0.7 ? crossLev * 0.85 : 0);
+    }
+    if (score > bestScore) { bestScore = score; bestProduct = prod; }
+  });
+
+  return bestScore >= FUZZY_THRESHOLD ? { product: bestProduct, score: bestScore } : null;
+};
+
+const fuzzyFindCustomer = (spokenName) => {
+  if (!spokenName || !customers || customers.length === 0) return null;
+  const normSpoken = _normalizeArabic(spokenName);
+  let bestCust = null;
+  let bestScore = -1;
+
+  customers.forEach(cust => {
+    const custName = cust.shopName || cust.name || '';
+    const normCust = _normalizeArabic(custName);
+    let score = 0;
+
+    if (normCust === normSpoken) {
+      score = 1.0;
+    } else if (normCust.includes(normSpoken) || normSpoken.includes(normCust)) {
+      const overlapLen = Math.min(normCust.length, normSpoken.length);
+      score = overlapLen >= 2 ? 0.9 : 0;
+    } else {
+      const tss = _tokenSetSim(normCust, normSpoken);
+      const lev = _levSim(normCust, normSpoken);
+      score = tss * 0.5 + lev * 0.5;
+    }
+    if (score > bestScore) { bestScore = score; bestCust = cust; }
+  });
+
+  return bestScore >= FUZZY_THRESHOLD ? bestCust : null;
+};
+
 const processAiOrder = (aiOrder) => {
-  const aiData = aiOrder;
-  const customerNameInput = aiData.customer || aiData.customerName || '';
+  if (!aiOrder || typeof aiOrder !== 'object') {
+    showArabicToast('بيانات الذكاء الاصطناعي غير صالحة', 'error');
+    return;
+  }
+
+  const customerNameInput = String(aiOrder.customer || aiOrder.customerName || '').trim();
+
   if (customerNameInput) {
-    const matchedCust = customers.find(c => {
-      if (!c.shopName) c.shopName = c.name || '';
-      return c.shopName.includes(aiData.customer) || aiData.customer.includes(c.shopName);
-    });
+    const matchedCust = fuzzyFindCustomer(customerNameInput);
     if (matchedCust) {
       toggleQuickCustomerMode(false);
-      if (checkoutCustomerSelect) {
-        checkoutCustomerSelect.value = matchedCust.id;
-      }
+      if (checkoutCustomerSelect) checkoutCustomerSelect.value = matchedCust.id;
       if (customCustomerDropdownLabel) {
-        customCustomerDropdownLabel.textContent = `${matchedCust.name} (${matchedCust.address})`;
+        customCustomerDropdownLabel.textContent = `${matchedCust.name || matchedCust.shopName} (${matchedCust.address || ''})`;
       }
     } else {
       toggleQuickCustomerMode(true);
-      if (checkoutQuickCustomerName) {
-        checkoutQuickCustomerName.value = customerNameInput;
-      }
-      showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${customerNameInput}"`, "info");
+      if (checkoutQuickCustomerName) checkoutQuickCustomerName.value = customerNameInput;
+      showArabicToast(`عميل جديد: "${customerNameInput}" — سيُضاف تلقائياً`, 'info');
     }
   }
 
-  // Clear current active shopping cart first
   cart.forEach(item => {
     const prod = inventory.find(p => p.id === item.productId);
-    if (prod) {
-      prod.qty += item.qty;
-      prod.quantity += item.qty;
-    }
+    if (prod) { prod.qty += item.qty; prod.quantity += item.qty; }
   });
   cart = [];
 
-  const items = aiData.items || [];
-  items.forEach(item => {
-    const matchedProd = products.find(p => p.name.includes(item.name) || item.name.includes(p.name));
-    if (matchedProd) {
-      const qtyToAdd = parseInt(item.qty) || 1;
-      const actualQty = Math.min(matchedProd.quantity, qtyToAdd);
+  const items = Array.isArray(aiOrder.items) ? aiOrder.items : [];
+  const unmatchedItems = [];
+  const addedItems = [];
+
+  items.forEach(aiItem => {
+    const spokenName = String(aiItem.name || '').trim();
+    if (!spokenName) return;
+    const qtyWanted = Math.max(1, parseInt(aiItem.qty) || 1);
+    const match = fuzzyFindProduct(spokenName);
+
+    if (match) {
+      const prod = match.product;
+      const available = prod.quantity;
+      const actualQty = Math.min(available, qtyWanted);
+
       if (actualQty > 0) {
-        matchedProd.qty -= actualQty;
-        matchedProd.quantity -= actualQty;
-        cart.push({
-          productId: matchedProd.id,
-          qty: actualQty,
-          price: matchedProd.price
-        });
-        if (actualQty < qtyToAdd) {
-          showArabicToast(`تمت إضافة ${actualQty} فقط من "${matchedProd.name}" لنفاد المخزون`, "info");
+        const existing = cart.find(c => c.productId === prod.id);
+        if (existing) {
+          existing.qty += actualQty;
+          prod.qty -= actualQty;
+          prod.quantity -= actualQty;
+        } else {
+          prod.qty -= actualQty;
+          prod.quantity -= actualQty;
+          cart.push({ productId: prod.id, qty: actualQty, price: prod.price });
+        }
+        addedItems.push(`${prod.name} ×${actualQty}`);
+        if (actualQty < qtyWanted) {
+          showArabicToast(`"${prod.name}": طلبت ${qtyWanted} والمتاح ${actualQty} فقط`, 'info');
         }
       } else {
-        showArabicToast(`المنتج "${matchedProd.name}" نفد من المخزن!`, "error");
+        showArabicToast(`"${prod.name}" نفد من المخزن!`, 'error');
       }
     } else {
-      showArabicToast(`لم يتم العثور على منتج باسم "${item.name}"`, "error");
+      unmatchedItems.push(spokenName);
     }
   });
+
+  if (unmatchedItems.length > 0) {
+    showArabicToast(`لم يُعثر على: ${unmatchedItems.join(' | ')}`, 'error');
+  }
 
   updateCartBadge();
   renderSalesGrid();
   renderCartRows();
   saveCartState();
 
-  // Open modal using Bootstrap or jQuery as requested, otherwise fallback to custom method
-  let modalOpened = false;
-  if (typeof bootstrap !== 'undefined') {
-    try {
-      new bootstrap.Modal(document.getElementById('checkoutModal') || document.getElementById('checkout-modal')).show();
-      modalOpened = true;
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  if (!modalOpened && typeof $ !== 'undefined' && $.fn && $.fn.modal) {
-    try {
-      $('#checkoutModal').modal('show');
-      $('#checkout-modal').modal('show');
-      modalOpened = true;
-    } catch (e) {
-      console.error(e);
-    }
-  }
-  if (!modalOpened) {
+  setTimeout(() => {
     openCheckoutModal(true);
-  }
+    if (addedItems.length > 0) {
+      showArabicToast(`✅ أُضيف: ${addedItems.join('، ')}`, 'success');
+    }
+  }, 80);
+};
 
-  showArabicToast("تم ملء الفاتورة بواسطة مساعد الذكاء الاصطناعي بنجاح!", "success");
+const _safeParseAiJson = (raw) => {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'object') return raw; 
+
+  let s = String(raw).trim();
+  s = s.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/i, '').trim();
+  s = s.replace(/`/g, '').trim();
+  const objMatch = s.match(/\{[\s\S]*\}/);
+  if (objMatch) s = objMatch[0];
+
+  try {
+    return JSON.parse(s);
+  } catch {
+    try {
+      return JSON.parse(s.replace(/\u200f|\u200e|\u202a|\u202c/g, ''));
+    } catch {
+      return null;
+    }
+  }
 };
 
 const handleVoiceSubmit = async (transcript) => {
@@ -4718,148 +4864,132 @@ const handleVoiceSubmit = async (transcript) => {
   try {
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify({
-        action: 'smart_voice',
-        text: sanitizedText,
-        token: 'POS_AUTH_KEY_2026'
-      }),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'smart_voice', text: sanitizedText, token: APP_SECRET_TOKEN }),
       redirect: 'follow'
     });
 
-    const result = await response.json();
-    console.log("Smart voice response result:", result);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    if (result.status === "error") {
-      alert("خطأ من السيرفر: " + result.message);
+    const result = await response.json();
+
+    if (result.status === 'error') {
+      showArabicToast('خطأ من الذكاء الاصطناعي: ' + (result.message || 'خطأ مجهول'), 'error');
       return;
     }
 
-    if (result.status === "success") {
-      let aiData = result.aiData;
-      if (typeof aiData === 'string') {
-        let cleanJson = aiData.trim();
-        if (cleanJson.startsWith('```json')) {
-          cleanJson = cleanJson.substring(7);
-        } else if (cleanJson.startsWith('```')) {
-          cleanJson = cleanJson.substring(3);
-        }
-        if (cleanJson.endsWith('```')) {
-          cleanJson = cleanJson.substring(0, cleanJson.length - 3);
-        }
-        cleanJson = cleanJson.trim();
-        try {
-          aiData = JSON.parse(cleanJson);
-        } catch (e) {
-          console.error("Failed to parse aiData:", e);
-        }
+    if (result.status === 'success') {
+      const aiData = _safeParseAiJson(result.aiData);
+      if (!aiData) {
+        showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error');
+        return;
       }
-
-      if (aiData) {
-        processAiOrder(aiData);
-      }
-    } else {
-      alert("استجابة غير معروفة من السيرفر");
+      closeSmartAiModal();
+      processAiOrder(aiData);
     }
   } catch (err) {
-    console.error("Smart voice processing error:", err);
-    showArabicToast("فشل الاتصال بالذكاء الاصطناعي: " + err.message, "error");
+    console.error('Voice submit error:', err);
+    showArabicToast('فشل الاتصال بالذكاء الاصطناعي: ' + err.message, 'error');
   } finally {
     if (aiLoadingState) aiLoadingState.classList.add('hidden');
   }
 };
 
+const _resetSilenceTimer = (finalCallback) => {
+  clearTimeout(_silenceTimer);
+  _silenceTimer = setTimeout(() => {
+    if (isRecording && _accumulatedTranscript.trim()) {
+      if (recognition) { try { recognition.stop(); } catch (_) {} }
+    }
+  }, SILENCE_TIMEOUT_MS);
+};
+
 const startRecording = async () => {
   try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-    }
+    await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
-    console.error("Microphone permission denied:", err);
-    showArabicToast("يجب السماح بالوصول إلى الميكروفون لاستخدام هذه الميزة", "error");
+    showArabicToast('يجب السماح بالوصول إلى الميكروفون', 'error');
     return;
   }
 
-  try {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      showArabicToast("تصفحك لا يدعم ميزة التعرف على الصوت", "error");
-      return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    showArabicToast('متصفحك لا يدعم التعرف على الصوت — استخدم Chrome أو Edge', 'error');
+    return;
+  }
+
+  _accumulatedTranscript = '';
+  clearTimeout(_silenceTimer);
+
+  recognition = new SR();
+  recognition.lang = 'ar-IQ';
+  recognition.continuous = true;      
+  recognition.interimResults = true;  
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    isRecording = true;
+    createLiveSpeechOverlay();
+    if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
+    if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
+    if (aiMicBtn) aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
+  };
+
+  recognition.onresult = (event) => {
+    let interimNow = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        _accumulatedTranscript += chunk + ' ';
+      } else {
+        interimNow += chunk;
+      }
     }
+    const displayText = (_accumulatedTranscript + interimNow).trim();
+    updateLiveSpeechText(displayText || '...');
+    _resetSilenceTimer();
+  };
 
-    recognition = new SpeechRecognition();
-    recognition.lang = 'ar-IQ';
-    recognition.continuous = false;
-    recognition.interimResults = true;
+  recognition.onerror = (event) => {
+    console.error('SpeechRecognition error:', event.error);
+    const nonFatalErrors = ['no-speech', 'audio-capture'];
+    if (!nonFatalErrors.includes(event.error)) {
+      showArabicToast('خطأ في التعرف على الصوت: ' + event.error, 'error');
+    }
+    stopRecording();
+  };
 
-    recognition.onstart = () => {
-      isRecording = true;
-      createLiveSpeechOverlay();
-      if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
-      if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
-      if (aiMicBtn) {
-        aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-      }
-    };
-
-    recognition.onresult = (event) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
-      
-      for (let i = 0; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
-      }
-      
-      const fullText = finalTranscript + interimTranscript;
-      updateLiveSpeechText(fullText || '...');
-
-      if (event.results[0] && event.results[0].isFinal) {
-        const finalText = event.results[0][0].transcript.trim();
-        if (finalText) {
-          recognition.stop();
-          handleVoiceSubmit(finalText);
-        }
-      }
-    };
-
-    recognition.onerror = (event) => {
-      console.error("Speech error event:", event);
+  recognition.onend = () => {
+    clearTimeout(_silenceTimer);
+    const finalText = _accumulatedTranscript.trim();
+    if (finalText && isRecording) {
       stopRecording();
-      showArabicToast("حدث خطأ في التعرف على الصوت: " + event.error, "error");
-    };
-
-    recognition.onend = () => {
+      handleVoiceSubmit(finalText);
+    } else {
       stopRecording();
-    };
+    }
+  };
 
+  try {
     recognition.start();
-
-  } catch (error) {
-    console.error("Speech recognition start failed:", error);
+    _resetSilenceTimer();
+  } catch (err) {
+    console.error('recognition.start() failed:', err);
+    showArabicToast('تعذّر بدء التسجيل: ' + err.message, 'error');
   }
 };
 
 const stopRecording = () => {
+  clearTimeout(_silenceTimer);
   if (!isRecording) return;
   isRecording = false;
   destroyLiveSpeechOverlay();
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
   if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
-  if (aiMicBtn) {
-    aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-  }
+  if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
   if (recognition) {
-    try {
-      recognition.stop();
-    } catch (e) {
-      console.error(e);
-    }
+    try { recognition.stop(); } catch (_) {}
+    recognition = null;
   }
 };
 
@@ -4868,154 +4998,44 @@ const toggleRecording = async () => {
     showArabicToast('المساعد الذكي يحتاج إلى إنترنت', 'error');
     return;
   }
-  if (isRecording) {
-    stopRecording();
-  } else {
-    await startRecording();
-  }
+  if (isRecording) { stopRecording(); } else { await startRecording(); }
 };
 
 const executeAiCommand = async () => {
-  const text = aiTextInput.value.trim();
-  if (!text) {
-    showArabicToast("الرجاء كتابة طلب أو التحدث أولاً", "error");
-    return;
-  }
-
-  if (isRecording) {
-    stopRecording();
-  }
-
+  const text = aiTextInput ? aiTextInput.value.trim() : '';
+  if (!text) { showArabicToast('الرجاء كتابة طلب أو التحدث أولاً', 'error'); return; }
+  if (isRecording) stopRecording();
   if (aiLoadingState) aiLoadingState.classList.remove('hidden');
   if (aiExecuteBtn) aiExecuteBtn.disabled = true;
 
-  const payload = {
-    action: "analyzeText",
-    text: text,
-    token: APP_SECRET_TOKEN
-  };
-
   try {
-    console.log("Sending AI text analysis request to:", BACKEND_URL);
-    console.log("Payload:", payload);
-
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
       mode: 'cors',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'analyzeText', text, token: APP_SECRET_TOKEN }),
       redirect: 'follow'
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const result = await response.json();
-    console.log("AI analysis response result:", result);
-    
-    if (result.status === "error") {
-      alert("خطأ من السيرفر: " + result.message);
+
+    if (result.status === 'error') {
+      showArabicToast('خطأ من السيرفر: ' + (result.message || ''), 'error');
       return;
     }
 
-    if (result.status === "success" && result.aiData) {
-      const aiData = result.aiData;
-      
-      if (!aiData.items) aiData.items = [];
-      inventory.forEach(prod => {
-        if (text.toLowerCase().includes(prod.name.toLowerCase())) {
-          const alreadyMatched = aiData.items.some(aiItem => 
-            aiItem.name.toLowerCase().includes(prod.name.toLowerCase()) || 
-            prod.name.toLowerCase().includes(aiItem.name.toLowerCase())
-          );
-          if (!alreadyMatched) {
-            aiData.items.push({
-              name: prod.name,
-              qty: 1
-            });
-          }
-        }
-      });
-      
-      if (aiData.customerName) {
-        const match = customers.find(c => 
-          c.name.toLowerCase().includes(aiData.customerName.toLowerCase()) ||
-          aiData.customerName.toLowerCase().includes(c.name.toLowerCase())
-        );
-        if (match) {
-          toggleQuickCustomerMode(false);
-          checkoutCustomerSelect.value = match.id;
-        } else {
-          toggleQuickCustomerMode(true);
-          checkoutQuickCustomerName.value = aiData.customerName;
-          showArabicToast(`تم تفعيل الإضافة السريعة للمحل "${aiData.customerName}"`, "info");
-        }
-      }
-
-      if (aiData.items && Array.isArray(aiData.items) && aiData.items.length > 0) {
-        cart.forEach(item => {
-          const prod = inventory.find(p => p.id === item.productId);
-          if (prod) {
-            prod.qty += item.qty;
-            prod.quantity += item.qty;
-          }
-        });
-        cart = [];
-
-        aiData.items.forEach(aiItem => {
-          const prod = inventory.find(p => 
-            p.name.toLowerCase().includes(aiItem.name.toLowerCase()) ||
-            aiItem.name.toLowerCase().includes(p.name.toLowerCase())
-          );
-          if (prod) {
-            const qtyToAdd = parseInt(aiItem.qty) || 1;
-            const actualQty = Math.min(prod.quantity, qtyToAdd);
-            if (actualQty > 0) {
-              prod.qty -= actualQty;
-              prod.quantity -= actualQty;
-              cart.push({
-                productId: prod.id,
-                qty: actualQty
-              });
-              if (actualQty < qtyToAdd) {
-                showArabicToast(`تمت إضافة ${actualQty} فقط من "${prod.name}" لنفاد المخزون`, "info");
-              }
-            } else {
-              showArabicToast(`المنتج "${prod.name}" نفد من المخزن!`, "error");
-            }
-          } else {
-            showArabicToast(`لم يتم العثور على منتج باسم "${aiItem.name}"`, "error");
-          }
-        });
-
-        updateCartBadge();
-        renderSalesGrid();
-        renderCartRows();
-        saveCartState();
-      }
-
-      if (aiData.paidAmount !== undefined && aiData.paidAmount !== null) {
-        checkoutReceivedInput.value = aiData.paidAmount;
-      }
-
-      let sum = 0;
-      cart.forEach(item => {
-        const prod = inventory.find(p => p.id === item.productId);
-        if (prod) sum += prod.price * item.qty;
-      });
-      checkoutSubtotalVal.textContent = `${sum.toLocaleString()} د.ع`;
-      checkoutFinalVal.textContent = `${sum.toLocaleString()} د.ع`;
-      triggerCheckoutPricingRefresh();
-
+    if (result.status === 'success' && result.aiData) {
+      const aiData = _safeParseAiJson(result.aiData);
+      if (!aiData) { showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error'); return; }
       closeSmartAiModal();
-      openCheckoutModal(true);
-      showArabicToast("تم ملء الفاتورة بواسطة الذكاء الاصطناعي بنجاح!", "success");
+      processAiOrder(aiData);
     } else {
-      alert("فشل في تحليل النص: استجابة غير معروفة");
+      showArabicToast('فشل تحليل النص — استجابة غير صالحة', 'error');
     }
   } catch (err) {
-    console.error("AI assistant network/fetch error details:", err);
-    showArabicToast("فشل الاتصال بمساعد الذكاء الاصطناعي: " + err.message, "error");
-    alert("حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: " + err.message);
+    console.error('executeAiCommand error:', err);
+    showArabicToast('فشل الاتصال بالذكاء الاصطناعي: ' + err.message, 'error');
   } finally {
     if (aiLoadingState) aiLoadingState.classList.add('hidden');
     if (aiExecuteBtn) aiExecuteBtn.disabled = false;

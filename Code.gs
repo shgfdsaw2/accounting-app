@@ -278,3 +278,154 @@ function addReturnRaw(ss, data) {
     }
   });
 }
+
+function callGeminiWithRetry(text) {
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=" +
+    GEMINI_API_KEY;
+
+  const systemPrompt =
+    'You are a JSON-only extraction engine for an Iraqi van-sales POS system. ' +
+    'The user speaks Iraqi Arabic dialect. Examples:\n' +
+    '"نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي" → {"customer":"سنتر تبارك","items":[{"name":"برغر لحم","qty":2},{"name":"كرسبي","qty":4}]}\n' +
+    '"انطيت لاسواق الوادي كارتونين كبة" → {"customer":"اسواق الوادي","items":[{"name":"كبة","qty":2}]}\n' +
+    'Rules:\n' +
+    '1. Output RAW JSON ONLY — zero markdown, zero backticks, zero prose.\n' +
+    '2. Schema: {"customer":"string","items":[{"name":"string","qty":integer}]}\n' +
+    '3. "qty" must be a number, never a string.\n' +
+    '4. Customer field uses the shop/place name the salesman visited.\n' +
+    '5. Filler words (روحت، نزلت، انطيت، وديت، جبت) are irrelevant — ignore them.\n' +
+    '6. If quantity words appear (كارتون/كرتون=1, زوج=2, نص كرتون=0.5→round up to 1) convert them.\n' +
+    'DO NOT wrap output in ```json``` or any other text.';
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: systemPrompt },
+          { text: "Input: " + text }
+        ]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.1,
+      topP: 0.8,
+      maxOutputTokens: 512
+    }
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const RETRY_DELAYS = [0, 1500, 3000]; 
+  let lastError = null;
+
+  for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
+    if (RETRY_DELAYS[attempt] > 0) Utilities.sleep(RETRY_DELAYS[attempt]);
+
+    try {
+      const response = UrlFetchApp.fetch(url, options);
+      const httpCode = response.getResponseCode();
+
+      if (httpCode === 429) {
+        Utilities.sleep(4000);
+        lastError = new Error("Gemini rate-limited (429)");
+        continue;
+      }
+
+      if (httpCode !== 200) {
+        lastError = new Error("Gemini HTTP " + httpCode + ": " + response.getContentText().slice(0, 200));
+        continue;
+      }
+
+      const rawBody = response.getContentText();
+      const bodyJson = JSON.parse(rawBody);
+
+      const candidate = (bodyJson.candidates || [])[0];
+      if (!candidate) {
+        lastError = new Error("Gemini returned no candidates");
+        continue;
+      }
+
+      if (candidate.finishReason === "SAFETY") {
+        throw new Error("Gemini blocked the request due to safety filters");
+      }
+
+      const rawText = ((candidate.content || {}).parts || [{}])[0].text || "";
+
+      const parsed = _sanitizeAndParseGeminiJson(rawText);
+      if (!parsed) {
+        lastError = new Error("JSON extraction failed from Gemini response: " + rawText.slice(0, 300));
+        continue;
+      }
+
+      return _normalizeAiResponse(parsed);
+
+    } catch (err) {
+      lastError = err;
+      if (err.message && err.message.includes("safety")) throw err;
+    }
+  }
+
+  throw new Error(
+    "فشل الاتصال بجيميناي بعد " + RETRY_DELAYS.length + " محاولات — " +
+    (lastError ? lastError.message : "خطأ مجهول")
+  );
+}
+
+function _sanitizeAndParseGeminiJson(raw) {
+  if (!raw || typeof raw !== "string") return null;
+
+  let s = raw.trim();
+  s = s.replace(/^\`\`\`(?:json)?\s*/i, "").replace(/\s*\`\`\`$/i, "").trim();
+  s = s.replace(/`/g, "").replace(/[\u200f\u200e\u202a\u202c\ufeff]/g, "").trim();
+
+  try { return JSON.parse(s); } catch (_) {}
+
+  const objMatch = s.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try { return JSON.parse(objMatch[0]); } catch (_) {}
+  }
+
+  try {
+    const fixed = s
+      .replace(/'/g, '"')                                      
+      .replace(/,\s*([}\]])/g, '$1')                           
+      .replace(/([{,]\s*)(\w[\u0600-\u06FF\w]*)\s*:/g, '$1"$2":'); 
+    return JSON.parse(fixed);
+  } catch (_) {}
+
+  return null;
+}
+
+function _normalizeAiResponse(obj) {
+  if (!obj || typeof obj !== "object") return { customer: "", items: [] };
+
+  const customer = String(
+    obj.customer || obj.customerName || obj.shop || obj.shopName ||
+    obj["العميل"] || obj["المحل"] || ""
+  ).trim();
+
+  let items = [];
+  const rawItems = obj.items || obj.products || obj["المواد"] || obj["المنتجات"] || [];
+
+  if (Array.isArray(rawItems)) {
+    items = rawItems
+      .map(item => {
+        if (!item || typeof item !== "object") return null;
+        const name = String(
+          item.name || item.product || item["الاسم"] || item["المادة"] || item["المنتج"] || ""
+        ).trim();
+        const qty = Math.max(1, Math.round(parseFloat(item.qty || item.quantity || item["الكمية"] || 1) || 1));
+        return name ? { name, qty } : null;
+      })
+      .filter(Boolean);
+  }
+
+  return { customer, items };
+}
