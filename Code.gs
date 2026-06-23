@@ -18,60 +18,64 @@ function doGet(e) {
 
 function doPost(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var postData = JSON.parse(e.postData.contents);
+  var requestData = JSON.parse(e.postData.contents);
   
   // Token verification
-  if (postData.token !== "POS_AUTH_KEY_2026") {
+  if (requestData.token !== "POS_AUTH_KEY_2026") {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unauthorized token" }))
       .setMimeType(ContentService.MimeType.JSON);
   }
   
-  var action = postData.action;
+  var action = requestData.action;
   var customersSheet = ss.getSheetByName("العملاء");
+  var result = { status: "success" };
 
-  if (action === 'smart_voice_audio') {
-    try {
-      if (!postData.audioBase64 || !postData.mimeType) throw new Error("Missing audio data");
-      var aiResult = callGeminiWithRetry(null, postData.audioBase64, postData.mimeType);
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success', aiData: aiResult }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    } catch (err) {
-      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
-  }
-
-  if (action === 'smart_voice' || action === 'analyzeText') {
-    try {
-      var aiResult = callGeminiWithRetry(postData.text);
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success', aiData: aiResult }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    } catch (err) {
-      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
-                           .setMimeType(ContentService.MimeType.JSON);
-    }
+  switch (action) {
+      case "smart_voice":
+      case "analyzeText":
+        if (!requestData.text) {
+          result = { status: "error", message: "لم يتم إرسال نص للتحليل" };
+        } else {
+          result = { status: "success", aiData: callGeminiWithRetry(requestData.text) };
+        }
+        break;
+      case "smart_voice_audio":
+        if (!requestData.audioBase64 || !requestData.mimeType) {
+          result = { status: "error", message: "Missing audio data" };
+        } else {
+          result = { status: "success", aiData: callGeminiWithRetry(null, requestData.audioBase64, requestData.mimeType) };
+        }
+        break;
+    case "addCustomer":
+      addCustomerRaw(customersSheet, requestData);
+      break;
+    case "updateCustomer":
+      var values = customersSheet.getDataRange().getValues();
+      updateCustomerRaw(customersSheet, requestData.oldShopName, requestData, values);
+      break;
+    case "addProduct":
+      addProductRaw(ss, requestData);
+      break;
+    case "updateProduct":
+      updateProductRaw(ss, requestData.oldName, requestData);
+      break;
+    case "deleteProduct":
+      deleteProductRaw(ss, requestData.name);
+      break;
+    case "addSale":
+      addSaleRaw(ss, requestData);
+      break;
+    case "addPurchase":
+      addPurchaseRaw(ss, requestData);
+      break;
+    case "addReturn":
+      addReturnRaw(ss, requestData);
+      break;
+    default:
+      result = { status: "error", message: "Unknown action" };
   }
   
-  if (action === "addCustomer") {
-    addCustomerRaw(customersSheet, postData);
-  } else if (action === "updateCustomer") {
-    var values = customersSheet.getDataRange().getValues();
-    updateCustomerRaw(customersSheet, postData.oldShopName, postData, values);
-  } else if (action === "addProduct") {
-    addProductRaw(ss, postData);
-  } else if (action === "updateProduct") {
-    updateProductRaw(ss, postData.oldName, postData);
-  } else if (action === "deleteProduct") {
-    deleteProductRaw(ss, postData.name);
-  } else if (action === "addSale") {
-    addSaleRaw(ss, postData);
-  } else if (action === "addPurchase") {
-    addPurchaseRaw(ss, postData);
-  } else if (action === "addReturn") {
-    addReturnRaw(ss, postData);
-  }
-  
-  return ContentService.createTextOutput(JSON.stringify({ status: "success" }))
+  return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -303,93 +307,58 @@ function addReturnRaw(ss, data) {
 }
 
 function callGeminiWithRetry(text, audioBase64, audioMimeType) {
-  const url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=" +
-    GEMINI_API_KEY;
-
-  const systemPrompt =
-    'You are a JSON-only extraction engine for an Iraqi van-sales POS system. ' +
-    'The user speaks Iraqi Arabic dialect. Listen to the audio or read the text.\n' +
-    'Rules:\n' +
-    '1. Output RAW JSON ONLY — zero markdown, zero backticks, zero prose.\n' +
-    '2. Schema: {"customer":"string","items":[{"name":"string","qty":integer}]}\n' +
-    '3. "qty" must be a number, never a string.\n' +
-    '4. Customer field uses the shop/place name the salesman visited.\n' +
-    '5. If quantity words appear (كارتون/كرتون=1, زوج=2, نص كرتون=0.5→round up to 1) convert them.\n' +
-    'DO NOT wrap output in ```json``` or any other text.';
-
-  let partsArray = [{ text: systemPrompt }];
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=" + GEMINI_API_KEY;
+  
+  const systemInstruction = `You are a smart POS assistant for an Iraqi distribution van.
+The user will speak in Iraqi Arabic (e.g., "نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي").
+Your job is to extract the customer's shop name and the items with their exact quantities.
+Ignore filler words.
+You MUST return ONLY a raw JSON object. No markdown, no \`\`\`json, no explanations.
+Format: {"customer": "اسم المحل", "items": [{"name": "اسم المادة", "qty": رقم}]}`;
+  
+  let partsArray = [{ text: systemInstruction }];
   
   if (audioBase64 && audioMimeType) {
     partsArray.push({
-      inlineData: {
-        mimeType: audioMimeType,
-        data: audioBase64
-      }
+      inlineData: { mimeType: audioMimeType, data: audioBase64 }
     });
     partsArray.push({ text: "Extract the customer and items from this audio." });
   } else if (text) {
-    partsArray.push({ text: "Input: " + text });
+    partsArray.push({ text: "Text to parse: " + text });
   }
 
-  const payload = {
-    contents: [{ parts: partsArray }],
-    generationConfig: {
-      responseMimeType: "application/json",
-      temperature: 0.1,
-      topP: 0.8,
-      maxOutputTokens: 512
-    }
+  const payload = { 
+    contents: [{ parts: partsArray }], 
+    generationConfig: { responseMimeType: "application/json" } 
+  };
+  
+  const options = { 
+    method: "post", 
+    contentType: "application/json", 
+    payload: JSON.stringify(payload), 
+    muteHttpExceptions: true 
   };
 
-  const options = {
-    method: "post",
-    contentType: "application/json",
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  const RETRY_DELAYS = [0, 1500, 3000]; 
   let lastError = null;
-
-  for (let attempt = 0; attempt < RETRY_DELAYS.length; attempt++) {
-    if (RETRY_DELAYS[attempt] > 0) Utilities.sleep(RETRY_DELAYS[attempt]);
-
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = UrlFetchApp.fetch(url, options);
-      const httpCode = response.getResponseCode();
-
-      if (httpCode === 429) {
-        Utilities.sleep(4000);
-        lastError = new Error("Gemini rate-limited (429)");
-        continue;
+      if (response.getResponseCode() === 200) {
+        let rawText = JSON.parse(response.getContentText()).candidates[0].content.parts[0].text.trim();
+        rawText = rawText.replace(/^```(json)?\s*/i, "").replace(/```$/i, "").trim();
+        const parsedData = JSON.parse(rawText);
+        if (parsedData && !parsedData.customer && parsedData.customerName) {
+          parsedData.customer = parsedData.customerName;
+        }
+        return parsedData;
       }
-
-      if (httpCode !== 200) {
-        lastError = new Error("Gemini HTTP " + httpCode + ": " + response.getContentText().slice(0, 200));
-        continue;
-      }
-
-      const bodyJson = JSON.parse(response.getContentText());
-      const candidate = (bodyJson.candidates || [])[0];
-      if (!candidate) throw new Error("No candidates");
-      if (candidate.finishReason === "SAFETY") throw new Error("Safety block");
-
-      const rawText = ((candidate.content || {}).parts || [{}])[0].text || "";
-      const parsed = _sanitizeAndParseGeminiJson(rawText);
-      if (!parsed) {
-        lastError = new Error("JSON parse fail");
-        continue;
-      }
-
-      return _normalizeAiResponse(parsed);
-
+      throw new Error("Gemini Error Status Code: " + response.getResponseCode());
     } catch (err) {
       lastError = err;
+      if (attempt < 3) Utilities.sleep(1500); 
     }
   }
-
-  throw new Error("فشل الاتصال بجيميناي: " + (lastError ? lastError.message : ""));
+  throw new Error("فشل الاتصال بذكاء جيميناي بعد 3 محاولات: " + lastError.toString());
 }
 
 function _sanitizeAndParseGeminiJson(raw) {
