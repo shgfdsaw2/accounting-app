@@ -4893,29 +4893,55 @@ const handleVoiceSubmit = async (transcript) => {
   }
 };
 
+const logSpeechDebug = (msg) => {
+  let panel = document.getElementById('speech-debug-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'speech-debug-panel';
+    panel.style.cssText = [
+      'position:fixed','top:10px','left:10px','right:10px',
+      'max-height:160px','overflow-y:auto',
+      'background:rgba(0,0,0,0.85)','color:#0f0',
+      'font-family:monospace','font-size:10px','padding:8px',
+      'border-radius:8px','z-index:999999','word-break:break-all',
+      'pointer-events:none','direction:ltr','text-align:left'
+    ].join(';');
+    document.body.appendChild(panel);
+  }
+  const time = new Date().toLocaleTimeString();
+  panel.innerHTML += `[${time}] ${msg}<br>`;
+  panel.scrollTop = panel.scrollHeight;
+};
+
 const startRecording = async () => {
+  logSpeechDebug('startRecording() initialized');
   try {
+    logSpeechDebug('Requesting audio media access...');
     await navigator.mediaDevices.getUserMedia({ audio: true });
+    logSpeechDebug('Audio media access GRANTED.');
   } catch (err) {
+    logSpeechDebug(`Audio access DENIED: ${err.message}`);
     showArabicToast('يجب السماح بالوصول إلى الميكروفون', 'error');
     return;
   }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
+    logSpeechDebug('SpeechRecognition API NOT supported on this browser.');
     showArabicToast('متصفحك لا يدعم التعرف على الصوت', 'error');
     return;
   }
 
+  logSpeechDebug('Initializing SpeechRecognition instance...');
   _accumulatedTranscript = '';
   recognition = new SR();
   recognition.lang = 'ar-IQ';
-  // Mobile browsers prefer continuous=false for single distinct commands
   recognition.continuous = false;      
   recognition.interimResults = true;  
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
+    logSpeechDebug('onstart event fired');
     isRecording = true;
     createLiveSpeechOverlay();
     if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
@@ -4923,11 +4949,42 @@ const startRecording = async () => {
     if (aiMicBtn) aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
   };
 
+  recognition.onaudiostart = () => {
+    logSpeechDebug('onaudiostart event fired');
+  };
+
+  recognition.onsoundstart = () => {
+    logSpeechDebug('onsoundstart event fired');
+  };
+
+  recognition.onspeechstart = () => {
+    logSpeechDebug('onspeechstart event fired (speech detected)');
+  };
+
+  recognition.onspeechend = () => {
+    logSpeechDebug('onspeechend event fired');
+  };
+
+  recognition.onsoundend = () => {
+    logSpeechDebug('onsoundend event fired');
+  };
+
+  recognition.onaudioend = () => {
+    logSpeechDebug('onaudioend event fired');
+  };
+
+  recognition.onnomatch = () => {
+    logSpeechDebug('onnomatch event fired (no matching speech recognized)');
+  };
+
   recognition.onresult = (event) => {
+    logSpeechDebug(`onresult event fired (results length: ${event.results.length})`);
     let interimNow = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const chunk = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
+      const isFinal = event.results[i].isFinal;
+      logSpeechDebug(`Result chunk: "${chunk}" (isFinal: ${isFinal})`);
+      if (isFinal) {
         _accumulatedTranscript += chunk + ' ';
       } else {
         interimNow += chunk;
@@ -4938,6 +4995,9 @@ const startRecording = async () => {
   };
 
   recognition.onerror = (event) => {
+    const errDetails = `Error code/name: ${event.error}, Message: ${event.message || 'N/A'}`;
+    logSpeechDebug(`onerror event fired. DETAILS: ${errDetails}`);
+    alert(`[Speech API Debug Error]\n${errDetails}`);
     console.error('SpeechRecognition error:', event.error);
     const nonFatalErrors = ['no-speech', 'audio-capture'];
     if (!nonFatalErrors.includes(event.error)) {
@@ -4946,7 +5006,11 @@ const startRecording = async () => {
   };
 
   recognition.onend = () => {
-    if (!isRecording) return; // Prevent double trigger if manually stopped
+    logSpeechDebug('onend event fired');
+    if (!isRecording) {
+      logSpeechDebug('onend aborted: isRecording is already false (manually stopped)');
+      return; 
+    }
     isRecording = false;
     destroyLiveSpeechOverlay();
     
@@ -4956,6 +5020,7 @@ const startRecording = async () => {
     if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
 
     const finalText = _accumulatedTranscript.trim();
+    logSpeechDebug(`onend final transcript to submit: "${finalText}"`);
     if (finalText) {
       handleVoiceSubmit(finalText);
     } else {
@@ -4964,15 +5029,22 @@ const startRecording = async () => {
   };
 
   try {
+    logSpeechDebug('Calling recognition.start()...');
     recognition.start();
+    logSpeechDebug('recognition.start() call complete.');
   } catch (err) {
+    logSpeechDebug(`recognition.start() failed: ${err.message}`);
     console.error('recognition.start() failed:', err);
     showArabicToast('تعذّر بدء التسجيل: ' + err.message, 'error');
   }
 };
 
 const stopRecording = () => {
-  if (!isRecording) return;
+  logSpeechDebug('stopRecording() called');
+  if (!isRecording) {
+    logSpeechDebug('stopRecording() aborted: not currently recording');
+    return;
+  }
   isRecording = false;
   destroyLiveSpeechOverlay();
   if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
@@ -4980,10 +5052,17 @@ const stopRecording = () => {
   if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
   
   if (recognition) {
-    try { recognition.stop(); } catch (_) {}
+    try { 
+      logSpeechDebug('Calling recognition.stop()...');
+      recognition.stop(); 
+      logSpeechDebug('recognition.stop() called successfully.');
+    } catch (e) {
+      logSpeechDebug(`recognition.stop() failed: ${e.message}`);
+    }
   }
   
   const finalText = _accumulatedTranscript.trim();
+  logSpeechDebug(`stopRecording final transcript to submit: "${finalText}"`);
   if (finalText) {
     handleVoiceSubmit(finalText);
   }
