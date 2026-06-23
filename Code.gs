@@ -6,10 +6,18 @@
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var customersSheet = ss.getSheetByName("العملاء");
+  var salesSheet = ss.getSheetByName("المبيعات");
+  var purchasesSheet = ss.getSheetByName("المشتريات");
+  var suppliersSheet = ss.getSheetByName("الموردين") || ss.getSheetByName("المجهزين");
+  var usersSheet = ss.getSheetByName("المستخدمين") || ss.getSheetByName("users");
   
   var data = {
     products: getProductsData(ss),
-    customers: getCustomersData(customersSheet)
+    customers: getCustomersData(customersSheet),
+    sales: getSalesData(salesSheet),
+    purchases: getPurchasesData(purchasesSheet),
+    suppliers: getSuppliersData(suppliersSheet),
+    users: getUsersData(usersSheet)
   };
   
   return ContentService.createTextOutput(JSON.stringify(data))
@@ -17,20 +25,21 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var requestData = JSON.parse(e.postData.contents);
-  
-  // Token verification
-  if (requestData.token !== "POS_AUTH_KEY_2026") {
-    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unauthorized token" }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  
-  var action = requestData.action;
-  var customersSheet = ss.getSheetByName("العملاء");
-  var result = { status: "success" };
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var requestData = JSON.parse(e.postData.contents);
+    
+    // Token verification
+    if (requestData.token !== "POS_AUTH_KEY_2026") {
+      return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "Unauthorized token" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var action = requestData.action;
+    var customersSheet = ss.getSheetByName("العملاء");
+    var result = { status: "success" };
 
-  switch (action) {
+    switch (action) {
       case "smart_voice":
       case "analyzeText":
         if (!requestData.text) {
@@ -46,37 +55,48 @@ function doPost(e) {
           result = { status: "success", aiData: callGeminiWithRetry(null, requestData.audioBase64, requestData.mimeType) };
         }
         break;
-    case "addCustomer":
-      addCustomerRaw(customersSheet, requestData);
-      break;
-    case "updateCustomer":
-      var values = customersSheet.getDataRange().getValues();
-      updateCustomerRaw(customersSheet, requestData.oldShopName, requestData, values);
-      break;
-    case "addProduct":
-      addProductRaw(ss, requestData);
-      break;
-    case "updateProduct":
-      updateProductRaw(ss, requestData.oldName, requestData);
-      break;
-    case "deleteProduct":
-      deleteProductRaw(ss, requestData.name);
-      break;
-    case "addSale":
-      addSaleRaw(ss, requestData);
-      break;
-    case "addPurchase":
-      addPurchaseRaw(ss, requestData);
-      break;
-    case "addReturn":
-      addReturnRaw(ss, requestData);
-      break;
-    default:
-      result = { status: "error", message: "Unknown action" };
+      case "addCustomer":
+        addCustomerRaw(customersSheet, requestData);
+        break;
+      case "updateCustomer":
+        var values = customersSheet.getDataRange().getValues();
+        updateCustomerRaw(customersSheet, requestData.oldShopName, requestData, values);
+        break;
+      case "addProduct":
+        addProductRaw(ss, requestData);
+        break;
+      case "updateProduct":
+        updateProductRaw(ss, requestData.oldName, requestData);
+        break;
+      case "deleteProduct":
+        deleteProductRaw(ss, requestData.name);
+        break;
+      case "addSale":
+        addSaleRaw(ss, requestData);
+        break;
+      case "addPurchase":
+        addPurchaseRaw(ss, requestData);
+        break;
+      case "addReturn":
+        addReturnRaw(ss, requestData);
+        break;
+      case "getCustomerStatement":
+        result = { status: "success", statement: getCustomerStatementRaw(ss, requestData.customerName) };
+        break;
+      case "archiveData":
+        archiveDataRaw(ss);
+        result = { status: "success" };
+        break;
+      default:
+        result = { status: "error", message: "Unknown action" };
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  
-  return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function addCustomerRaw(sheet, data) {
@@ -254,60 +274,87 @@ function deleteProductRaw(ss, name) {
 
 function addSaleRaw(ss, data) {
   var stockSheet = ss.getSheetByName("المخزون");
-  if (!stockSheet) return;
-  var values = stockSheet.getDataRange().getValues();
-  
-  data.items.forEach(function(item) {
-    for (var i = 1; i < values.length; i++) {
-      if (values[i][0] === item.name) {
-        var currentQty = parseFloat(values[i][1]) || 0;
-        var newQty = currentQty - (parseFloat(item.qty) || 0);
-        stockSheet.getRange(i + 1, 2).setValue(newQty);
-        values[i][1] = newQty;
-        break;
+  if (stockSheet) {
+    var values = stockSheet.getDataRange().getValues();
+    data.items.forEach(function(item) {
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === item.name) {
+          var currentQty = parseFloat(values[i][1]) || 0;
+          var newQty = currentQty - (parseFloat(item.qty) || 0);
+          stockSheet.getRange(i + 1, 2).setValue(newQty);
+          values[i][1] = newQty;
+          break;
+        }
       }
-    }
-  });
+    });
+  }
+
+  var salesSheet = ss.getSheetByName("المبيعات");
+  if (salesSheet) {
+    salesSheet.appendRow([
+      data.invoiceId,
+      data.date,
+      data.customerName,
+      JSON.stringify(data.items),
+      parseFloat(data.discount) || 0,
+      parseFloat(data.totalAmount) || 0,
+      parseFloat(data.receivedAmount) || 0,
+      data.status || "مدفوع"
+    ]);
+  }
 }
 
 function addPurchaseRaw(ss, data) {
   var stockSheet = ss.getSheetByName("المخزون");
-  if (!stockSheet) return;
-  var values = stockSheet.getDataRange().getValues();
-  
-  data.items.forEach(function(item) {
-    for (var i = 1; i < values.length; i++) {
-      if (values[i][0] === item.name) {
-        var currentQty = parseFloat(values[i][1]) || 0;
-        var newQty = currentQty + (parseFloat(item.qty) || 0);
-        stockSheet.getRange(i + 1, 2).setValue(newQty);
-        values[i][1] = newQty;
-        break;
+  if (stockSheet) {
+    var values = stockSheet.getDataRange().getValues();
+    data.items.forEach(function(item) {
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === item.name) {
+          var currentQty = parseFloat(values[i][1]) || 0;
+          var newQty = currentQty + (parseFloat(item.qty) || 0);
+          stockSheet.getRange(i + 1, 2).setValue(newQty);
+          values[i][1] = newQty;
+          break;
+        }
       }
-    }
-  });
+    });
+  }
+
+  var purchasesSheet = ss.getSheetByName("المشتريات");
+  if (purchasesSheet) {
+    purchasesSheet.appendRow([
+      data.invoiceId,
+      data.companyName,
+      data.dateTime,
+      parseFloat(data.totalAfterDiscount) || 0,
+      parseFloat(data.totalBeforeDiscount) || 0,
+      JSON.stringify(data.items)
+    ]);
+  }
 }
 
 function addReturnRaw(ss, data) {
   var stockSheet = ss.getSheetByName("المخزون");
-  if (!stockSheet) return;
-  var values = stockSheet.getDataRange().getValues();
-  
-  data.items.forEach(function(item) {
-    for (var i = 1; i < values.length; i++) {
-      if (values[i][0] === item.name) {
-        var currentQty = parseFloat(values[i][1]) || 0;
-        var newQty = currentQty + (parseFloat(item.qty) || 0);
-        stockSheet.getRange(i + 1, 2).setValue(newQty);
-        values[i][1] = newQty;
-        break;
+  if (stockSheet) {
+    var values = stockSheet.getDataRange().getValues();
+    data.items.forEach(function(item) {
+      for (var i = 1; i < values.length; i++) {
+        if (values[i][0] === item.name) {
+          var currentQty = parseFloat(values[i][1]) || 0;
+          var newQty = currentQty + (parseFloat(item.qty) || 0);
+          stockSheet.getRange(i + 1, 2).setValue(newQty);
+          values[i][1] = newQty;
+          break;
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 function callGeminiWithRetry(text, audioBase64, audioMimeType) {
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=" + GEMINI_API_KEY;
+  var apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
   
   const systemInstruction = `You are a smart POS assistant for an Iraqi distribution van.
 The user will speak in Iraqi Arabic (e.g., "نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي").
@@ -411,4 +458,103 @@ function _normalizeAiResponse(obj) {
   }
 
   return { customer, items };
+}
+
+function getSalesData(sheet) {
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var sales = [];
+  for (var i = 1; i < data.length; i++) {
+    sales.push({
+      "رقم الفاتورة": data[i][0],
+      "تاريخ الفاتورة": data[i][1],
+      "اسم العميل": data[i][2],
+      "تفاصيل المواد": data[i][3],
+      "الخصم": parseFloat(data[i][4]) || 0,
+      "المبلغ الإجمالي": parseFloat(data[i][5]) || 0,
+      "المبلغ المستلم": parseFloat(data[i][6]) || 0,
+      "حالة الفاتورة": data[i][7] || "مدفوع"
+    });
+  }
+  return sales;
+}
+
+function getPurchasesData(sheet) {
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var purchases = [];
+  for (var i = 1; i < data.length; i++) {
+    purchases.push({
+      "رقم الفاتورة": data[i][0],
+      "اسم الشركة": data[i][1],
+      "التاريخ والوقت": data[i][2],
+      "المبلغ النهائي بعد الخصم": parseFloat(data[i][3]) || 0,
+      "المبلغ الكلي قبل الخصم": parseFloat(data[i][4]) || 0,
+      "تفاصيل المواد": data[i][5]
+    });
+  }
+  return purchases;
+}
+
+function getSuppliersData(sheet) {
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var suppliers = [];
+  for (var i = 1; i < data.length; i++) {
+    suppliers.push({
+      "اسم الشركة": data[i][0],
+      "الديون": parseFloat(data[i][1]) || 0
+    });
+  }
+  return suppliers;
+}
+
+function getUsersData(sheet) {
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var users = [];
+  for (var i = 1; i < data.length; i++) {
+    users.push({
+      "اسم المستخدم": data[i][0],
+      "كلمة المرور": String(data[i][1] || ""),
+      "الصلاحية": data[i][2] || "بائع"
+    });
+  }
+  return users;
+}
+
+function getCustomerStatementRaw(ss, customerName) {
+  var salesSheet = ss.getSheetByName("المبيعات");
+  if (!salesSheet) return [];
+  var data = salesSheet.getDataRange().getValues();
+  var statement = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][2] === customerName) {
+      statement.push({
+        invoiceId: data[i][0],
+        date: data[i][1],
+        customerName: data[i][2],
+        details: data[i][3],
+        discount: parseFloat(data[i][4]) || 0,
+        totalAmount: parseFloat(data[i][5]) || 0,
+        receivedAmount: parseFloat(data[i][6]) || 0,
+        status: data[i][7] || "مدفوع"
+      });
+    }
+  }
+  return statement;
+}
+
+function archiveDataRaw(ss) {
+  var salesSheet = ss.getSheetByName("المبيعات");
+  var archiveSalesSheet = ss.getSheetByName("أرشيف المبيعات") || ss.insertSheet("أرشيف المبيعات");
+  if (salesSheet) {
+    var data = salesSheet.getDataRange().getValues();
+    if (data.length > 1) {
+      for (var i = 1; i < data.length; i++) {
+        archiveSalesSheet.appendRow(data[i]);
+      }
+      salesSheet.deleteRows(2, data.length - 1);
+    }
+  }
 }
