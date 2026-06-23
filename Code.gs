@@ -28,6 +28,29 @@ function doPost(e) {
   
   var action = postData.action;
   var customersSheet = ss.getSheetByName("العملاء");
+
+  if (action === 'smart_voice_audio') {
+    try {
+      if (!postData.audioBase64 || !postData.mimeType) throw new Error("Missing audio data");
+      var aiResult = callGeminiWithRetry(null, postData.audioBase64, postData.mimeType);
+      return ContentService.createTextOutput(JSON.stringify({ status: 'success', aiData: aiResult }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  if (action === 'smart_voice' || action === 'analyzeText') {
+    try {
+      var aiResult = callGeminiWithRetry(postData.text);
+      return ContentService.createTextOutput(JSON.stringify({ status: 'success', aiData: aiResult }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() }))
+                           .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
   
   if (action === "addCustomer") {
     addCustomerRaw(customersSheet, postData);
@@ -279,34 +302,38 @@ function addReturnRaw(ss, data) {
   });
 }
 
-function callGeminiWithRetry(text) {
+function callGeminiWithRetry(text, audioBase64, audioMimeType) {
   const url =
     "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=" +
     GEMINI_API_KEY;
 
   const systemPrompt =
     'You are a JSON-only extraction engine for an Iraqi van-sales POS system. ' +
-    'The user speaks Iraqi Arabic dialect. Examples:\n' +
-    '"نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي" → {"customer":"سنتر تبارك","items":[{"name":"برغر لحم","qty":2},{"name":"كرسبي","qty":4}]}\n' +
-    '"انطيت لاسواق الوادي كارتونين كبة" → {"customer":"اسواق الوادي","items":[{"name":"كبة","qty":2}]}\n' +
+    'The user speaks Iraqi Arabic dialect. Listen to the audio or read the text.\n' +
     'Rules:\n' +
     '1. Output RAW JSON ONLY — zero markdown, zero backticks, zero prose.\n' +
     '2. Schema: {"customer":"string","items":[{"name":"string","qty":integer}]}\n' +
     '3. "qty" must be a number, never a string.\n' +
     '4. Customer field uses the shop/place name the salesman visited.\n' +
-    '5. Filler words (روحت، نزلت، انطيت، وديت، جبت) are irrelevant — ignore them.\n' +
-    '6. If quantity words appear (كارتون/كرتون=1, زوج=2, نص كرتون=0.5→round up to 1) convert them.\n' +
+    '5. If quantity words appear (كارتون/كرتون=1, زوج=2, نص كرتون=0.5→round up to 1) convert them.\n' +
     'DO NOT wrap output in ```json``` or any other text.';
 
-  const payload = {
-    contents: [
-      {
-        parts: [
-          { text: systemPrompt },
-          { text: "Input: " + text }
-        ]
+  let partsArray = [{ text: systemPrompt }];
+  
+  if (audioBase64 && audioMimeType) {
+    partsArray.push({
+      inlineData: {
+        mimeType: audioMimeType,
+        data: audioBase64
       }
-    ],
+    });
+    partsArray.push({ text: "Extract the customer and items from this audio." });
+  } else if (text) {
+    partsArray.push({ text: "Input: " + text });
+  }
+
+  const payload = {
+    contents: [{ parts: partsArray }],
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.1,
@@ -343,24 +370,15 @@ function callGeminiWithRetry(text) {
         continue;
       }
 
-      const rawBody = response.getContentText();
-      const bodyJson = JSON.parse(rawBody);
-
+      const bodyJson = JSON.parse(response.getContentText());
       const candidate = (bodyJson.candidates || [])[0];
-      if (!candidate) {
-        lastError = new Error("Gemini returned no candidates");
-        continue;
-      }
-
-      if (candidate.finishReason === "SAFETY") {
-        throw new Error("Gemini blocked the request due to safety filters");
-      }
+      if (!candidate) throw new Error("No candidates");
+      if (candidate.finishReason === "SAFETY") throw new Error("Safety block");
 
       const rawText = ((candidate.content || {}).parts || [{}])[0].text || "";
-
       const parsed = _sanitizeAndParseGeminiJson(rawText);
       if (!parsed) {
-        lastError = new Error("JSON extraction failed from Gemini response: " + rawText.slice(0, 300));
+        lastError = new Error("JSON parse fail");
         continue;
       }
 
@@ -368,14 +386,10 @@ function callGeminiWithRetry(text) {
 
     } catch (err) {
       lastError = err;
-      if (err.message && err.message.includes("safety")) throw err;
     }
   }
 
-  throw new Error(
-    "فشل الاتصال بجيميناي بعد " + RETRY_DELAYS.length + " محاولات — " +
-    (lastError ? lastError.message : "خطأ مجهول")
-  );
+  throw new Error("فشل الاتصال بجيميناي: " + (lastError ? lastError.message : ""));
 }
 
 function _sanitizeAndParseGeminiJson(raw) {

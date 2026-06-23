@@ -4560,18 +4560,18 @@ const openSmartAiModal = () => {
 };
 
 const closeSmartAiModal = () => {
-  if (recognition) {
-    recognition.stop();
+  if (isRecording) {
+    stopRecording();
   }
   if (smartAiModal) {
     smartAiModal.classList.add('hidden');
   }
 };
 
-let recognition = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let isRecording = false;
 let liveSpeechOverlay = null;
-let _accumulatedTranscript = '';
 
 const createLiveSpeechOverlay = () => {
   let overlay = document.getElementById('live-speech-overlay');
@@ -4590,14 +4590,9 @@ const createLiveSpeechOverlay = () => {
     ].join(';');
     document.body.appendChild(overlay);
   }
-  overlay.textContent = '🎙️ تحدث الآن...';
+  overlay.textContent = '🎙️ جاري التسجيل... (تحدث الآن)';
   overlay.style.display = 'block';
   overlay.style.opacity = '1';
-};
-
-const updateLiveSpeechText = (text) => {
-  const overlay = document.getElementById('live-speech-overlay');
-  if (overlay && text && text.trim()) overlay.textContent = text;
 };
 
 const destroyLiveSpeechOverlay = () => {
@@ -4605,6 +4600,47 @@ const destroyLiveSpeechOverlay = () => {
   if (overlay) {
     overlay.style.opacity = '0';
     setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
+  }
+};
+
+const handleAudioSubmit = async (base64Audio, mimeType) => {
+  if (aiLoadingState) aiLoadingState.classList.remove('hidden');
+
+  try {
+    const response = await fetch(BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ 
+        action: 'smart_voice_audio', 
+        audioBase64: base64Audio, 
+        mimeType: mimeType,
+        token: APP_SECRET_TOKEN 
+      }),
+      redirect: 'follow'
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
+
+    if (result.status === 'error') {
+      showArabicToast('خطأ من الذكاء الاصطناعي: ' + (result.message || 'خطأ مجهول'), 'error');
+      return;
+    }
+
+    if (result.status === 'success') {
+      const aiData = _safeParseAiJson(result.aiData);
+      if (!aiData) {
+        showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error');
+        return;
+      }
+      closeSmartAiModal();
+      processAiOrder(aiData);
+    }
+  } catch (err) {
+    console.error('Audio submit error:', err);
+    showArabicToast('فشل إرسال البصمة الصوتية: ' + err.message, 'error');
+  } finally {
+    if (aiLoadingState) aiLoadingState.classList.add('hidden');
   }
 };
 
@@ -4852,219 +4888,66 @@ const _safeParseAiJson = (raw) => {
   }
 };
 
-const handleVoiceSubmit = async (transcript) => {
-  stopRecording();
-  const sanitizedText = String(transcript).trim().replace(/\s+/g, ' ');
-  if (!sanitizedText) return;
-
-  if (aiLoadingState) aiLoadingState.classList.remove('hidden');
-
+const startRecording = async () => {
   try {
-    const response = await fetch(BACKEND_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'smart_voice', text: sanitizedText, token: APP_SECRET_TOKEN }),
-      redirect: 'follow'
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-    const result = await response.json();
-
-    if (result.status === 'error') {
-      showArabicToast('خطأ من الذكاء الاصطناعي: ' + (result.message || 'خطأ مجهول'), 'error');
-      return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Choose optimal mimeType for Android
+    let options = { mimeType: 'audio/webm' };
+    if (!MediaRecorder.isTypeSupported('audio/webm')) {
+      options = { mimeType: 'audio/mp4' }; 
     }
 
-    if (result.status === 'success') {
-      const aiData = _safeParseAiJson(result.aiData);
-      if (!aiData) {
-        showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error');
+    mediaRecorder = new MediaRecorder(stream, options);
+    audioChunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+
+    mediaRecorder.onstart = () => {
+      isRecording = true;
+      createLiveSpeechOverlay();
+      if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
+      if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ التسجيل... (انقر للإرسال)';
+      if (aiMicBtn) aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
+    };
+
+    mediaRecorder.onstop = () => {
+      isRecording = false;
+      destroyLiveSpeechOverlay();
+      if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
+      if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
+      if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
+
+      // Stop all mic tracks to release the hardware
+      stream.getTracks().forEach(track => track.stop());
+
+      if (audioChunks.length === 0) {
+        showArabicToast('لم يتم تسجيل أي صوت.', 'error');
         return;
       }
-      closeSmartAiModal();
-      processAiOrder(aiData);
-    }
+
+      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+      const reader = new FileReader();
+      reader.readAsDataURL(audioBlob);
+      reader.onloadend = () => {
+        const base64String = reader.result.split(',')[1];
+        handleAudioSubmit(base64String, audioBlob.type);
+      };
+    };
+
+    mediaRecorder.start();
+
   } catch (err) {
-    console.error('Voice submit error:', err);
-    showArabicToast('فشل الاتصال بالذكاء الاصطناعي: ' + err.message, 'error');
-  } finally {
-    if (aiLoadingState) aiLoadingState.classList.add('hidden');
-  }
-};
-
-const logSpeechDebug = (msg) => {
-  let panel = document.getElementById('speech-debug-panel');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = 'speech-debug-panel';
-    panel.style.cssText = [
-      'position:fixed','top:10px','left:10px','right:10px',
-      'max-height:160px','overflow-y:auto',
-      'background:rgba(0,0,0,0.85)','color:#0f0',
-      'font-family:monospace','font-size:10px','padding:8px',
-      'border-radius:8px','z-index:999999','word-break:break-all',
-      'pointer-events:none','direction:ltr','text-align:left'
-    ].join(';');
-    document.body.appendChild(panel);
-  }
-  const time = new Date().toLocaleTimeString();
-  panel.innerHTML += `[${time}] ${msg}<br>`;
-  panel.scrollTop = panel.scrollHeight;
-};
-
-const startRecording = async () => {
-  logSpeechDebug('startRecording() initialized');
-  try {
-    logSpeechDebug('Requesting audio media access...');
-    await navigator.mediaDevices.getUserMedia({ audio: true });
-    logSpeechDebug('Audio media access GRANTED.');
-  } catch (err) {
-    logSpeechDebug(`Audio access DENIED: ${err.message}`);
-    showArabicToast('يجب السماح بالوصول إلى الميكروفون', 'error');
-    return;
-  }
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    logSpeechDebug('SpeechRecognition API NOT supported on this browser.');
-    showArabicToast('متصفحك لا يدعم التعرف على الصوت', 'error');
-    return;
-  }
-
-  logSpeechDebug('Initializing SpeechRecognition instance...');
-  _accumulatedTranscript = '';
-  recognition = new SR();
-  recognition.lang = 'ar-IQ';
-  recognition.continuous = false;      
-  recognition.interimResults = true;  
-  recognition.maxAlternatives = 1;
-
-  recognition.onstart = () => {
-    logSpeechDebug('onstart event fired');
-    isRecording = true;
-    createLiveSpeechOverlay();
-    if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
-    if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ الاستماع... (انقر للتوقف)';
-    if (aiMicBtn) aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-  };
-
-  recognition.onaudiostart = () => {
-    logSpeechDebug('onaudiostart event fired');
-  };
-
-  recognition.onsoundstart = () => {
-    logSpeechDebug('onsoundstart event fired');
-  };
-
-  recognition.onspeechstart = () => {
-    logSpeechDebug('onspeechstart event fired (speech detected)');
-  };
-
-  recognition.onspeechend = () => {
-    logSpeechDebug('onspeechend event fired');
-  };
-
-  recognition.onsoundend = () => {
-    logSpeechDebug('onsoundend event fired');
-  };
-
-  recognition.onaudioend = () => {
-    logSpeechDebug('onaudioend event fired');
-  };
-
-  recognition.onnomatch = () => {
-    logSpeechDebug('onnomatch event fired (no matching speech recognized)');
-  };
-
-  recognition.onresult = (event) => {
-    logSpeechDebug(`onresult event fired (results length: ${event.results.length})`);
-    let interimNow = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const chunk = event.results[i][0].transcript;
-      const isFinal = event.results[i].isFinal;
-      logSpeechDebug(`Result chunk: "${chunk}" (isFinal: ${isFinal})`);
-      if (isFinal) {
-        _accumulatedTranscript += chunk + ' ';
-      } else {
-        interimNow += chunk;
-      }
-    }
-    const displayText = (_accumulatedTranscript + interimNow).trim();
-    updateLiveSpeechText(displayText || '🎙️ جارٍ الاستماع...');
-  };
-
-  recognition.onerror = (event) => {
-    const errDetails = `Error code/name: ${event.error}, Message: ${event.message || 'N/A'}`;
-    logSpeechDebug(`onerror event fired. DETAILS: ${errDetails}`);
-    alert(`[Speech API Debug Error]\n${errDetails}`);
-    console.error('SpeechRecognition error:', event.error);
-    const nonFatalErrors = ['no-speech', 'audio-capture'];
-    if (!nonFatalErrors.includes(event.error)) {
-      showArabicToast('خطأ في التعرف على الصوت: ' + event.error, 'error');
-    }
-  };
-
-  recognition.onend = () => {
-    logSpeechDebug('onend event fired');
-    if (!isRecording) {
-      logSpeechDebug('onend aborted: isRecording is already false (manually stopped)');
-      return; 
-    }
-    isRecording = false;
-    destroyLiveSpeechOverlay();
-    
-    // Reset UI
-    if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
-    if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
-    if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-
-    const finalText = _accumulatedTranscript.trim();
-    logSpeechDebug(`onend final transcript to submit: "${finalText}"`);
-    if (finalText) {
-      handleVoiceSubmit(finalText);
-    } else {
-      showArabicToast('لم يتم التقاط أي صوت، يرجى المحاولة مجدداً', 'info');
-    }
-  };
-
-  try {
-    logSpeechDebug('Calling recognition.start()...');
-    recognition.start();
-    logSpeechDebug('recognition.start() call complete.');
-  } catch (err) {
-    logSpeechDebug(`recognition.start() failed: ${err.message}`);
-    console.error('recognition.start() failed:', err);
-    showArabicToast('تعذّر بدء التسجيل: ' + err.message, 'error');
+    console.error('MediaRecorder start failed:', err);
+    showArabicToast('تعذّر الوصول للمايكروفون', 'error');
   }
 };
 
 const stopRecording = () => {
-  logSpeechDebug('stopRecording() called');
-  if (!isRecording) {
-    logSpeechDebug('stopRecording() aborted: not currently recording');
-    return;
-  }
-  isRecording = false;
-  destroyLiveSpeechOverlay();
-  if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
-  if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
-  if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-  
-  if (recognition) {
-    try { 
-      logSpeechDebug('Calling recognition.stop()...');
-      recognition.stop(); 
-      logSpeechDebug('recognition.stop() called successfully.');
-    } catch (e) {
-      logSpeechDebug(`recognition.stop() failed: ${e.message}`);
-    }
-  }
-  
-  const finalText = _accumulatedTranscript.trim();
-  logSpeechDebug(`stopRecording final transcript to submit: "${finalText}"`);
-  if (finalText) {
-    handleVoiceSubmit(finalText);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
   }
 };
 
@@ -5073,7 +4956,11 @@ const toggleRecording = async () => {
     showArabicToast('المساعد الذكي يحتاج إلى إنترنت', 'error');
     return;
   }
-  if (isRecording) { stopRecording(); } else { await startRecording(); }
+  if (isRecording) { 
+    stopRecording(); 
+  } else { 
+    await startRecording(); 
+  }
 };
 
 const executeAiCommand = async () => {
