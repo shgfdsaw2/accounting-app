@@ -40,6 +40,22 @@ function doPost(e) {
     var result = { status: "success" };
 
     switch (action) {
+      case "getData":
+        var salesSheet = ss.getSheetByName("المبيعات");
+        var purchasesSheet = ss.getSheetByName("المشتريات");
+        var suppliersSheet = ss.getSheetByName("الموردين") || ss.getSheetByName("المجهزين");
+        var usersSheet = ss.getSheetByName("المستخدمين") || ss.getSheetByName("users");
+        result = {
+          status: "success",
+          products: getProductsData(ss),
+          customers: getCustomersData(customersSheet),
+          sales: getSalesData(salesSheet),
+          purchases: getPurchasesData(purchasesSheet),
+          suppliers: getSuppliersData(suppliersSheet),
+          users: getUsersData(usersSheet)
+        };
+        break;
+
       case "smart_voice":
       case "analyzeText":
         if (!requestData.text) {

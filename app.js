@@ -29,7 +29,7 @@ let vanStock = JSON.parse(localStorage.getItem('posVanStock')) || {};
 let journeyPlan = JSON.parse(localStorage.getItem('posJourneyPlan')) || [];
 let users = [];
 let activeUser = null;
-const BACKEND_URL = "YOUR_NEW_WEB_APP_URL_HERE";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
 const APP_SECRET_TOKEN = "POS_AUTH_KEY_2026";
 
 const saveCartState = () => {
@@ -904,12 +904,19 @@ const fetchData = (isSilent = false, username = '', password = '') => {
     renderInventoryList();
   }
 
-  let fetchUrl = BACKEND_URL;
-  if (username && password) {
-    fetchUrl += "?username=" + encodeURIComponent(username) + "&password=" + encodeURIComponent(password);
-  }
-
-  return fetch(fetchUrl)
+  return fetch(BACKEND_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8'
+    },
+    body: JSON.stringify({
+      action: 'getData',
+      username: username,
+      password: password,
+      token: APP_SECRET_TOKEN
+    })
+  })
     .then(res => {
       if (!res.ok) throw new Error("Network response was not ok");
       return res.json();
@@ -4819,10 +4826,11 @@ const executeAiCommand = async () => {
   try {
     const response = await fetch(BACKEND_URL, {
       method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'analyzeText', text, token: APP_SECRET_TOKEN }),
-      redirect: 'follow'
+      redirect: 'follow',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify({ action: 'analyzeText', text, token: APP_SECRET_TOKEN })
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -4915,14 +4923,15 @@ const startVoiceRecognition = () => {
     try {
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        redirect: 'follow',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
         body: JSON.stringify({
           action: 'analyzeText',
           text: transcript,
           token: 'POS_AUTH_KEY_2026'
-        }),
-        redirect: 'follow'
+        })
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
