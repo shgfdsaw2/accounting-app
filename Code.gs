@@ -353,8 +353,9 @@ function addReturnRaw(ss, data) {
 }
 
 function callGeminiWithRetry(text, audioBase64, audioMimeType) {
-  var apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+  var rawApiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  var apiKey = rawApiKey ? rawApiKey.trim() : "";
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
   
   const systemInstruction = `You are a smart POS assistant for an Iraqi distribution van.
 The user will speak in Iraqi Arabic (e.g., "نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي").
@@ -390,7 +391,8 @@ Format: {"customer": "اسم المحل", "items": [{"name": "اسم الماد�
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = UrlFetchApp.fetch(url, options);
-      if (response.getResponseCode() === 200) {
+      var statusCode = response.getResponseCode();
+      if (statusCode === 200) {
         let rawText = JSON.parse(response.getContentText()).candidates[0].content.parts[0].text.trim();
         rawText = rawText.replace(/^```(json)?\s*/i, "").replace(/```$/i, "").trim();
         const parsedData = JSON.parse(rawText);
@@ -399,7 +401,7 @@ Format: {"customer": "اسم المحل", "items": [{"name": "اسم الماد�
         }
         return parsedData;
       }
-      throw new Error("Gemini Error Status Code: " + response.getResponseCode());
+      throw new Error("Google Error " + statusCode + ": " + response.getContentText());
     } catch (err) {
       lastError = err;
       if (attempt < 3) Utilities.sleep(1500); 
