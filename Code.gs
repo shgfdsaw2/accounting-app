@@ -48,13 +48,7 @@ function doPost(e) {
           result = { status: "success", aiData: callGeminiWithRetry(requestData.text) };
         }
         break;
-      case "smart_voice_audio":
-        if (!requestData.audioBase64 || !requestData.mimeType) {
-          result = { status: "error", message: "Missing audio data" };
-        } else {
-          result = { status: "success", aiData: callGeminiWithRetry(null, requestData.audioBase64, requestData.mimeType) };
-        }
-        break;
+
       case "addCustomer":
         addCustomerRaw(customersSheet, requestData);
         break;
@@ -352,26 +346,21 @@ function addReturnRaw(ss, data) {
   }
 }
 
-function callGeminiWithRetry(text, audioBase64, audioMimeType) {
+function callGeminiWithRetry(text) {
   var rawApiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
   var apiKey = rawApiKey ? rawApiKey.trim() : "";
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
   
   const systemInstruction = `You are a smart POS assistant for an Iraqi distribution van.
 The user will speak in Iraqi Arabic (e.g., "نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي").
 Your job is to extract the customer's shop name and the items with their exact quantities.
 Ignore filler words.
 You MUST return ONLY a raw JSON object. No markdown, no \`\`\`json, no explanations.
-Format: {"customer": "اسم المحل", "items": [{"name": "اسم المادة", "qty": رقم}]}`;
+Format: {"customer": "string", "items": [{"name": "string", "qty": number}]}`;
   
   let partsArray = [{ text: systemInstruction }];
   
-  if (audioBase64 && audioMimeType) {
-    partsArray.push({
-      inlineData: { mimeType: audioMimeType, data: audioBase64 }
-    });
-    partsArray.push({ text: "Extract the customer and items from this audio." });
-  } else if (text) {
+  if (text) {
     partsArray.push({ text: "Text to parse: " + text });
   }
 

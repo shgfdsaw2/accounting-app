@@ -175,8 +175,7 @@
               <i class="fa-solid fa-magnifying-glass"></i>
             </span>
             <input type="text" id="sales-search-bar" placeholder="البحث عن منتج..." class="w-full bg-white text-gray-800 text-xs pl-8.5 pr-10 py-3 rounded-xl border border-gray-250/85 font-semibold shadow-sm focus:outline-none focus:border-[#1e5631] transition-all">
-            <!-- Mic Icon Button embedded on the far right -->
-            <button id="sales-mic-btn" type="button" class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-455 hover:text-[#1e5631] transition-colors cursor-pointer" title="تحدث بصوتك">
+            <button id="sales-voice-btn" type="button" class="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-[#1e5631] transition-colors cursor-pointer" title="طلب صوتي">
               <i class="fa-solid fa-microphone text-xs"></i>
             </button>
           </div>
@@ -1364,14 +1363,7 @@
           <textarea id="ai-text-input" rows="4" class="w-full bg-[#f4f6f5] text-gray-800 text-xs px-3.5 py-3 rounded-xl border border-gray-100 focus:outline-none focus:bg-white focus:border-[#1e5631] transition-all font-semibold resize-none" placeholder="أدخل نص الطلب هنا أو انقر على زر التحدث..."></textarea>
         </div>
 
-        <div class="flex items-center gap-3">
-          <!-- Mic / Voice Button -->
-          <button type="button" id="ai-mic-btn" class="flex-1 py-3 bg-[#e8ecea] hover:bg-[#1e5631]/10 text-[#1e5631] font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all flex items-center justify-center gap-2 active:scale-95 border border-[#c9d6cf]/30">
-            <span id="ai-mic-status-dot" class="w-2.5 h-2.5 rounded-full bg-red-500 hidden animate-pulse"></span>
-            <i class="fa-solid fa-microphone text-xs"></i>
-            <span id="ai-mic-btn-text">🎤 تحدث بصوتك</span>
-          </button>
-        </div>
+
 
         <!-- Action & Loading states -->
         <div class="space-y-2 pt-2">

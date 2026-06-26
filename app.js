@@ -29,7 +29,7 @@ let vanStock = JSON.parse(localStorage.getItem('posVanStock')) || {};
 let journeyPlan = JSON.parse(localStorage.getItem('posJourneyPlan')) || [];
 let users = [];
 let activeUser = null;
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxwkA3AUQ2uRiVNKfsrmtidH5GDKm3DoHb50qewPqfhKLILl-Q8UqB6QzvKlV_JVSRyGg/exec";
+const BACKEND_URL = "YOUR_NEW_WEB_APP_URL_HERE";
 const APP_SECRET_TOKEN = "POS_AUTH_KEY_2026";
 
 const saveCartState = () => {
@@ -763,6 +763,7 @@ const aiLoadingState = document.getElementById('ai-loading-state');
 
 // --- NEW DOM SELECTORS FOR AI & QUICK CUSTOMER ---
 const salesMicBtn = document.getElementById('sales-mic-btn');
+const salesVoiceBtn = document.getElementById('sales-voice-btn');
 const checkoutQuickCustomerBtn = document.getElementById('checkout-quick-customer-btn');
 const checkoutCustomerSelectWrapper = document.getElementById('checkout-customer-select-wrapper');
 const checkoutQuickCustomerWrapper = document.getElementById('checkout-quick-customer-wrapper');
@@ -4560,87 +4561,8 @@ const openSmartAiModal = () => {
 };
 
 const closeSmartAiModal = () => {
-  if (isRecording) {
-    stopRecording();
-  }
   if (smartAiModal) {
     smartAiModal.classList.add('hidden');
-  }
-};
-
-let mediaRecorder = null;
-let audioChunks = [];
-let isRecording = false;
-let liveSpeechOverlay = null;
-
-const createLiveSpeechOverlay = () => {
-  let overlay = document.getElementById('live-speech-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'live-speech-overlay';
-    overlay.style.cssText = [
-      'position:fixed','bottom:110px','left:50%',
-      'transform:translate3d(-50%,0,0)',
-      'background:rgba(0,0,0,0.86)','color:#fff',
-      'padding:12px 22px','border-radius:25px','z-index:99999',
-      'text-align:center','font-size:14px','font-family:Cairo,sans-serif',
-      'direction:rtl','max-width:88vw','word-break:break-word',
-      'box-shadow:0 4px 18px rgba(0,0,0,0.35)',
-      'transition:opacity 0.25s ease','pointer-events:none'
-    ].join(';');
-    document.body.appendChild(overlay);
-  }
-  overlay.textContent = '🎙️ جاري التسجيل... (تحدث الآن)';
-  overlay.style.display = 'block';
-  overlay.style.opacity = '1';
-};
-
-const destroyLiveSpeechOverlay = () => {
-  const overlay = document.getElementById('live-speech-overlay');
-  if (overlay) {
-    overlay.style.opacity = '0';
-    setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 300);
-  }
-};
-
-const handleAudioSubmit = async (base64Audio, mimeType) => {
-  if (aiLoadingState) aiLoadingState.classList.remove('hidden');
-
-  try {
-    const response = await fetch(BACKEND_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ 
-        action: 'smart_voice_audio', 
-        audioBase64: base64Audio, 
-        mimeType: mimeType,
-        token: APP_SECRET_TOKEN 
-      }),
-      redirect: 'follow'
-    });
-
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const result = await response.json();
-
-    if (result.status === 'error') {
-      showArabicToast('خطأ من الذكاء الاصطناعي: ' + (result.message || 'خطأ مجهول'), 'error');
-      return;
-    }
-
-    if (result.status === 'success') {
-      const aiData = _safeParseAiJson(result.aiData);
-      if (!aiData) {
-        showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error');
-        return;
-      }
-      closeSmartAiModal();
-      processAiOrder(aiData);
-    }
-  } catch (err) {
-    console.error('Audio submit error:', err);
-    showArabicToast('فشل إرسال البصمة الصوتية: ' + err.message, 'error');
-  } finally {
-    if (aiLoadingState) aiLoadingState.classList.add('hidden');
   }
 };
 
@@ -4888,85 +4810,9 @@ const _safeParseAiJson = (raw) => {
   }
 };
 
-const startRecording = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    
-    // Choose optimal mimeType for Android
-    let options = { mimeType: 'audio/webm' };
-    if (!MediaRecorder.isTypeSupported('audio/webm')) {
-      options = { mimeType: 'audio/mp4' }; 
-    }
-
-    mediaRecorder = new MediaRecorder(stream, options);
-    audioChunks = [];
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-    };
-
-    mediaRecorder.onstart = () => {
-      isRecording = true;
-      createLiveSpeechOverlay();
-      if (aiMicStatusDot) aiMicStatusDot.classList.remove('hidden');
-      if (aiMicBtnText) aiMicBtnText.textContent = 'جارٍ التسجيل... (انقر للإرسال)';
-      if (aiMicBtn) aiMicBtn.classList.add('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-    };
-
-    mediaRecorder.onstop = () => {
-      isRecording = false;
-      destroyLiveSpeechOverlay();
-      if (aiMicStatusDot) aiMicStatusDot.classList.add('hidden');
-      if (aiMicBtnText) aiMicBtnText.textContent = '🎤 تحدث بصوتك';
-      if (aiMicBtn) aiMicBtn.classList.remove('border-red-500', 'shadow-[0_0_15px_rgba(239,68,68,0.7)]', 'animate-pulse', 'recording');
-
-      // Stop all mic tracks to release the hardware
-      stream.getTracks().forEach(track => track.stop());
-
-      if (audioChunks.length === 0) {
-        showArabicToast('لم يتم تسجيل أي صوت.', 'error');
-        return;
-      }
-
-      const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = () => {
-        const base64String = reader.result.split(',')[1];
-        handleAudioSubmit(base64String, audioBlob.type);
-      };
-    };
-
-    mediaRecorder.start();
-
-  } catch (err) {
-    console.error('MediaRecorder start failed:', err);
-    showArabicToast('تعذّر الوصول للمايكروفون', 'error');
-  }
-};
-
-const stopRecording = () => {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
-};
-
-const toggleRecording = async () => {
-  if (!navigator.onLine) {
-    showArabicToast('المساعد الذكي يحتاج إلى إنترنت', 'error');
-    return;
-  }
-  if (isRecording) { 
-    stopRecording(); 
-  } else { 
-    await startRecording(); 
-  }
-};
-
 const executeAiCommand = async () => {
   const text = aiTextInput ? aiTextInput.value.trim() : '';
-  if (!text) { showArabicToast('الرجاء كتابة طلب أو التحدث أولاً', 'error'); return; }
-  if (isRecording) stopRecording();
+  if (!text) { showArabicToast('الرجاء كتابة طلب', 'error'); return; }
   if (aiLoadingState) aiLoadingState.classList.remove('hidden');
   if (aiExecuteBtn) aiExecuteBtn.disabled = true;
 
@@ -5004,14 +4850,115 @@ const executeAiCommand = async () => {
   }
 };
 
+let isVoiceRecognizing = false;
+const startVoiceRecognition = () => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    showArabicToast("متصفحك لا يدعم خاصية التعرف على الصوت", "error");
+    return;
+  }
+
+  if (isVoiceRecognizing) return;
+  isVoiceRecognizing = true;
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'ar-IQ';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  if (salesVoiceBtn) {
+    salesVoiceBtn.classList.add('animate-pulse', 'text-red-500');
+    salesVoiceBtn.classList.remove('text-gray-400');
+  }
+
+  showArabicToast("جاري الاستماع... تحدث الآن", "info");
+
+  recognition.onstart = () => {
+    console.log("Voice recognition started");
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    isVoiceRecognizing = false;
+    if (salesVoiceBtn) {
+      salesVoiceBtn.classList.remove('animate-pulse', 'text-red-500');
+      salesVoiceBtn.classList.add('text-gray-400');
+    }
+    
+    if (event.error === 'not-allowed') {
+      showArabicToast("صلاحية الوصول إلى الميكروفون مرفوضة", "error");
+    } else if (event.error === 'no-speech') {
+      showArabicToast("لم يتم التقاط أي صوت، يرجى المحاولة مجدداً", "error");
+    } else {
+      showArabicToast("فشل التعرف على الصوت: " + event.error, "error");
+    }
+  };
+
+  recognition.onend = () => {
+    isVoiceRecognizing = false;
+    if (salesVoiceBtn) {
+      salesVoiceBtn.classList.remove('animate-pulse', 'text-red-500');
+      salesVoiceBtn.classList.add('text-gray-400');
+    }
+  };
+
+  recognition.onresult = async (event) => {
+    const transcript = event.results[0][0].transcript;
+    console.log("Transcript received:", transcript);
+    if (!transcript.trim()) {
+      showArabicToast("لم يتم التقاط أي صوت واضح", "error");
+      return;
+    }
+
+    showArabicToast("جاري التحليل...", "info");
+
+    try {
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action: 'analyzeText',
+          text: transcript,
+          token: 'POS_AUTH_KEY_2026'
+        }),
+        redirect: 'follow'
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result = await response.json();
+
+      if (result.status === 'error') {
+        showArabicToast('خطأ من السيرفر: ' + (result.message || ''), 'error');
+        return;
+      }
+
+      if (result.status === 'success' && result.aiData) {
+        const aiData = _safeParseAiJson(result.aiData);
+        if (!aiData) {
+          showArabicToast('فشل تحليل رد الذكاء الاصطناعي', 'error');
+          return;
+        }
+        processAiOrder(aiData);
+      } else {
+        showArabicToast('فشل تحليل النص — استجابة غير صالحة', 'error');
+      }
+    } catch (err) {
+      console.error('Voice Order analysis error:', err);
+      showArabicToast('فشل الاتصال بالذكاء الاصطناعي: ' + err.message, 'error');
+    }
+  };
+
+  recognition.start();
+};
+
 if (smartAiBtn) smartAiBtn.addEventListener('click', openSmartAiModal);
-if (salesMicBtn) salesMicBtn.addEventListener('click', toggleRecording);
 if (checkoutQuickCustomerBtn) {
   checkoutQuickCustomerBtn.addEventListener('click', () => toggleQuickCustomerMode());
 }
 if (smartAiClose) smartAiClose.addEventListener('click', closeSmartAiModal);
-if (aiMicBtn) aiMicBtn.addEventListener('click', toggleRecording);
 if (aiExecuteBtn) aiExecuteBtn.addEventListener('click', executeAiCommand);
+if (salesVoiceBtn) salesVoiceBtn.addEventListener('click', startVoiceRecognition);
 
 const checkoutBackBtn = document.getElementById('checkout-back-btn');
 if (checkoutBackBtn) {
