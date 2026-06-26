@@ -355,7 +355,7 @@ function addReturnRaw(ss, data) {
 function callGeminiWithRetry(text, audioBase64, audioMimeType) {
   var rawApiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
   var apiKey = rawApiKey ? rawApiKey.trim() : "";
-  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" + apiKey;
+  const url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
   
   const systemInstruction = `You are a smart POS assistant for an Iraqi distribution van.
 The user will speak in Iraqi Arabic (e.g., "نزلت لسنتر تبارك 2 برغر لحم و 4 كرسبي").
