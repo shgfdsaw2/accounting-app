@@ -1755,26 +1755,19 @@ if (ledgerPrintBtn) {
 
 const fetchCustomerStatement = async (customerName) => {
   try {
-    showArabicToast('جاري تحميل كشف الحساب...', 'info');
-    const response = await fetch(BACKEND_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8'
-      },
-      body: JSON.stringify({
-        action: "getCustomerStatement",
-        customerName: customerName,
-        token: APP_SECRET_TOKEN
-      }),
-      redirect: 'follow'
-    });
-    
-    const result = await response.json();
-    if (result && result.status === 'success') {
-      return result.statement || [];
-    } else {
-      throw new Error(result.message || 'فشل في جلب البيانات');
-    }
+    const statement = salesHistory
+      .filter(sale => sale["اسم العميل"] === customerName)
+      .map(sale => ({
+        invoiceId: sale["رقم الفاتورة"],
+        date: sale["تاريخ الفاتورة"],
+        customerName: sale["اسم العميل"],
+        details: sale["تفاصيل المواد"],
+        discount: parseFloat(sale["الخصم"]) || 0,
+        totalAmount: parseFloat(sale["المبلغ الإجمالي"]) || 0,
+        receivedAmount: parseFloat(sale["المبلغ المستلم"]) || 0,
+        status: sale["حالة الفاتورة"] || "مدفوع"
+      }));
+    return statement;
   } catch (err) {
     console.error("fetchCustomerStatement error:", err);
     showArabicToast('تعذر تحميل كشف الحساب: ' + err.message, 'error');
