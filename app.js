@@ -2848,20 +2848,35 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     const center = (text, fontSize, isBold = true) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
-      const textWidth = ctx.measureText(text).width;
+      let textWidth = ctx.measureText(text).width;
+      let actualSize = fontSize;
+      while (textWidth > RAWBT_PRINT_WIDTH_PX - 30 && actualSize > 12) {
+        actualSize -= 1;
+        ctx.font = `${isBold ? 'bold ' : ''}${actualSize}px Cairo, sans-serif`;
+        textWidth = ctx.measureText(text).width;
+      }
       const x = (RAWBT_PRINT_WIDTH_PX - textWidth) / 2;
       ctx.fillText(text, x, y);
-      y += fontSize + 8;
+      y += actualSize + 8;
     };
     
     const rowLR = (leftText, rightText, fontSize, isBold = true) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
+      let leftWidth = ctx.measureText(leftText).width;
+      let rightWidth = ctx.measureText(rightText).width;
+      let actualSize = fontSize;
+      while (leftWidth + rightWidth > RAWBT_PRINT_WIDTH_PX - 30 && actualSize > 12) {
+        actualSize -= 1;
+        ctx.font = `${isBold ? 'bold ' : ''}${actualSize}px Cairo, sans-serif`;
+        leftWidth = ctx.measureText(leftText).width;
+        rightWidth = ctx.measureText(rightText).width;
+      }
       ctx.textAlign = 'right';
-      ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 10, y);
+      ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 15, y);
       ctx.textAlign = 'left';
-      ctx.fillText(leftText, 10, y);
+      ctx.fillText(leftText, 15, y);
       ctx.textAlign = 'right';
-      y += fontSize + 8;
+      y += actualSize + 8;
     };
     
     const dashedLine = () => {
@@ -2869,8 +2884,8 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.setLineDash([8, 4]);
-      ctx.moveTo(10, y + 2);
-      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 10, y + 2);
+      ctx.moveTo(15, y + 2);
+      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 15, y + 2);
       ctx.stroke();
       ctx.setLineDash([]);
       y += 12;
@@ -2903,9 +2918,16 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     // ITEMS TABLE
     (saleData.items || []).forEach(item => {
       ctx.font = 'bold 24px Cairo, sans-serif';
+      let nameWidth = ctx.measureText(item.name).width;
+      let itemFontSize = 24;
+      while (nameWidth > RAWBT_PRINT_WIDTH_PX - 30 && itemFontSize > 14) {
+        itemFontSize -= 1;
+        ctx.font = `bold ${itemFontSize}px Cairo, sans-serif`;
+        nameWidth = ctx.measureText(item.name).width;
+      }
       ctx.textAlign = 'right';
-      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 10, y);
-      y += 28;
+      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 15, y);
+      y += itemFontSize + 4;
       
       let qtyText = `العدد: ${item.qty} | السعر المفرد: ${fmt(item.price)} د.ع`;
       const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);

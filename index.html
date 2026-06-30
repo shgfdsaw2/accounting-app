@@ -1480,8 +1480,8 @@
   <div id="print-section" style="display: none;"></div>
   <div id="thermalReceipt" class="d-none"></div>
   
-  <div id="receiptTemplate" class="d-none" style="direction: rtl; width: 384px; background: #fff; color: #000; font-family: 'Cairo', sans-serif; padding: 0; margin: 0; font-weight: bold; font-size: 22px;">
-    <div style="text-align: center; margin-bottom: 10px; border-bottom: 2px dashed #000; padding-bottom: 8px;">
+  <div id="receiptTemplate" class="d-none" style="direction: rtl; width: 384px; background: #fff; color: #000; font-family: 'Cairo', sans-serif; padding: 10px 15px; margin: 0; font-weight: bold; font-size: 22px; box-sizing: border-box; word-wrap: break-word; overflow-wrap: break-word; white-space: normal;">
+    <div class="receipt-header" style="text-align: center; margin-bottom: 10px; border-bottom: 2px dashed #000; padding-bottom: 8px;">
       <h3 style="margin: 0 0 5px 0; font-weight: 900; font-size: 32px; color: #000;">شركة فستقه للمنتجات الغذائيه المحدوده</h3>
       <p style="margin: 0; font-size: 22px; color: #000;">البصره</p>
       <p style="margin: 0; font-size: 22px; color: #000;">07801406639 رقم الهاتف</p>
@@ -1505,7 +1505,7 @@
       <tr><td style="border: 1px solid #000; padding: 6px; background: #eee;">رصيد سابق</td><td style="border: 1px solid #000; padding: 6px; background: #eee;" id="recOldDebt"></td></tr>
       <tr><td style="border: 1px solid #000; padding: 6px; font-weight: bold; font-size: 24px;">المطلوب سداده</td><td style="border: 1px solid #000; padding: 6px; font-weight: bold; font-size: 24px;" id="recFinalDebt"></td></tr>
     </table>
-    <div style="text-align: center; font-size: 22px; margin-top: 12px; color: #000;">
+    <div class="receipt-footer" style="text-align: center; font-size: 22px; margin-top: 12px; color: #000;">
       <p style="margin: 0; font-weight: bold;">19/10 JEKOR جيكور</p>
       <p style="margin: 0; font-weight: bold;">الخطأ والسهو مرجوع للطرفين</p>
     </div>
