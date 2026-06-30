@@ -567,11 +567,13 @@ body {
     display: inline-block !important;
     font-size: 24px !important;
   }
-  #receiptTemplate table:nth-of-type(2) th:nth-child(1), #receiptTemplate table:nth-of-type(2) td:nth-child(1) { width: 10% !important; text-align: right !important; }
-  #receiptTemplate table:nth-of-type(2) th:nth-child(2), #receiptTemplate table:nth-of-type(2) td:nth-child(2) { width: 40% !important; text-align: right !important; }
-  #receiptTemplate table:nth-of-type(2) th:nth-child(3), #receiptTemplate table:nth-of-type(2) td:nth-child(3) { width: 20% !important; text-align: center !important; }
-  #receiptTemplate table:nth-of-type(2) th:nth-child(4), #receiptTemplate table:nth-of-type(2) td:nth-child(4) { width: 10% !important; text-align: center !important; }
-  #receiptTemplate table:nth-of-type(2) th:nth-child(5), #receiptTemplate table:nth-of-type(2) td:nth-child(5) { width: 20% !important; text-align: left !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(1), #receiptTemplate table:nth-of-type(2) td:nth-child(1) { width: 5% !important; text-align: right !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(2), #receiptTemplate table:nth-of-type(2) td:nth-child(2) { width: 30% !important; text-align: right !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(3), #receiptTemplate table:nth-of-type(2) td:nth-child(3) { width: 10% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(4), #receiptTemplate table:nth-of-type(2) td:nth-child(4) { width: 15% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(5), #receiptTemplate table:nth-of-type(2) td:nth-child(5) { width: 15% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(6), #receiptTemplate table:nth-of-type(2) td:nth-child(6) { width: 10% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(7), #receiptTemplate table:nth-of-type(2) td:nth-child(7) { width: 15% !important; text-align: left !important; }
   
   #receiptTemplate table:nth-of-type(3) td {
     font-size: 24px !important;

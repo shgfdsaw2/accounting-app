@@ -6,6 +6,7 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.error('Service Worker registration failed:', err));
   });
 }
+const fmt = (n) => Math.round(n).toLocaleString('en-US');
 
 // --- STATE DATA ---
 let inventory = [];
@@ -2646,14 +2647,21 @@ const populateReceiptTemplate = (saleData) => {
   if (itemsBodyEl) {
     let tbodyHtml = '';
     (saleData.items || []).forEach((item, index) => {
+      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name) || {};
+      const wholesale = prod.wholesalePrice || 0;
+      const retail = prod.sellPrice || item.price || 0;
+      const uPerCarton = prod.unitsPerCarton || 0;
       const rowTotal = item.price * item.qty;
+      
       tbodyHtml += `
         <tr>
           <td style="border: 1px solid #000; padding: 2px;">${index + 1}</td>
           <td style="border: 1px solid #000; padding: 2px; text-align: right;">${item.name}</td>
-          <td style="border: 1px solid #000; padding: 2px;">${item.price.toLocaleString()}</td>
           <td style="border: 1px solid #000; padding: 2px;">${item.qty}</td>
-          <td style="border: 1px solid #000; padding: 2px;">${rowTotal.toLocaleString()}</td>
+          <td style="border: 1px solid #000; padding: 2px;">${fmt(wholesale)} د.ع</td>
+          <td style="border: 1px solid #000; padding: 2px;">${fmt(retail)} د.ع</td>
+          <td style="border: 1px solid #000; padding: 2px;">${uPerCarton}</td>
+          <td style="border: 1px solid #000; padding: 2px;">${fmt(rowTotal)} د.ع</td>
         </tr>
       `;
     });
@@ -2661,13 +2669,13 @@ const populateReceiptTemplate = (saleData) => {
   }
 
   const totalEl = document.getElementById('recTotal');
-  if (totalEl) totalEl.innerText = `${netTotal.toLocaleString()} د.ع`;
+  if (totalEl) totalEl.innerText = `${fmt(subtotal)} د.ع`;
 
   const paidEl = document.getElementById('recPaid');
-  if (paidEl) paidEl.innerText = `${received.toLocaleString()} د.ع`;
+  if (paidEl) paidEl.innerText = `${fmt(received)} د.ع`;
 
   const remainingEl = document.getElementById('recRemaining');
-  if (remainingEl) remainingEl.innerText = `${remaining.toLocaleString()} د.ع`;
+  if (remainingEl) remainingEl.innerText = `${fmt(remaining)} د.ع`;
 
   let currentCustomerDebt = 0;
   if (lastCompletedCustomer) {
@@ -2683,10 +2691,10 @@ const populateReceiptTemplate = (saleData) => {
   const finalDebt = previousDebt + remaining;
 
   const oldDebtEl = document.getElementById('recOldDebt');
-  if (oldDebtEl) oldDebtEl.innerText = `${previousDebt.toLocaleString()} د.ع`;
+  if (oldDebtEl) oldDebtEl.innerText = `${fmt(previousDebt)} د.ع`;
 
   const finalDebtEl = document.getElementById('recFinalDebt');
-  if (finalDebtEl) finalDebtEl.innerText = `${finalDebt.toLocaleString()} د.ع`;
+  if (finalDebtEl) finalDebtEl.innerText = `${fmt(finalDebt)} د.ع`;
 };
 
 const renderVanTable = () => {
@@ -2844,8 +2852,6 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'top';
     
-    const fmt = (n) => Math.round(n).toLocaleString('en-US');
-    
     const center = (text, fontSize, isBold = false) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
       ctx.textAlign = 'center';
@@ -2886,6 +2892,18 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       y += 18;
     };
     
+    const smallDashedLine = () => {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.setLineDash([6, 6]);
+      ctx.moveTo(23, y + 2);
+      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 23, y + 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      y += 10;
+    };
+    
     // HEADER SECTION
     center("شركة فستقه للمنتجات الغذائيه المحدوده", 48, true);
     
@@ -2911,7 +2929,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     dashedLine();
     
     // ITEMS TABLE
-    (saleData.items || []).forEach(item => {
+    (saleData.items || []).forEach((item, index) => {
       ctx.font = 'bold 36px Cairo, sans-serif';
       let nameWidth = ctx.measureText(item.name).width;
       let itemFontSize = 36;
@@ -2924,20 +2942,32 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 23, y);
       y += itemFontSize + 6;
       
-      let qtyText = `العدد: ${item.qty} | السعر المفرد: ${fmt(item.price)} د.ع`;
-      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
-      if (prod && prod.unitsPerCarton && prod.unitsPerCarton > 0) {
-        qtyText += ` | القطع بالكرتون: ${prod.unitsPerCarton}`;
-      }
+      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name) || {};
+      const wholesale = prod.wholesalePrice || 0;
+      const retail = prod.sellPrice || item.price || 0;
+      const uPerCarton = prod.unitsPerCarton || 0;
+      
+      const qtyText = `العدد: ${item.qty} | الجملة: ${fmt(wholesale)} د.ع | المفرد: ${fmt(retail)} د.ع | القطع/كرتون: ${uPerCarton}`;
       
       ctx.font = 'bold 33px Cairo, sans-serif';
+      let qtyTextWidth = ctx.measureText(qtyText).width;
+      let qtyFontSize = 33;
+      while (qtyTextWidth > RAWBT_PRINT_WIDTH_PX - 46 && qtyFontSize > 16) {
+        qtyFontSize -= 1;
+        ctx.font = `bold ${qtyFontSize}px Cairo, sans-serif`;
+        qtyTextWidth = ctx.measureText(qtyText).width;
+      }
       ctx.textAlign = 'right';
       ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 23, y);
-      y += 39;
+      y += qtyFontSize + 6;
       
       const lineTotal = item.price * item.qty;
-      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 36, true);
+      rowLR(`${fmt(lineTotal)} د.ع`, "الإجمالي:", 36, true);
       y += 15;
+      
+      if (index < (saleData.items || []).length - 1) {
+        smallDashedLine();
+      }
     });
     
     dashedLine();
@@ -2950,10 +2980,6 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const remaining = Math.max(0, netTotal - received);
     
     rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 33, true);
-    if (discount > 0) {
-      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 33, true);
-      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 36, true);
-    }
     rowLR(`${fmt(received)} د.ع`, "المدفوع:", 33, true);
     rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 33, true);
     
@@ -2972,7 +2998,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const finalDebt = previousDebt + remaining;
     
     rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 36, true);
-    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 36, true);
+    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 42, true);
     
     dashedLine();
     
