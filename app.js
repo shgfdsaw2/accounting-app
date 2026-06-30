@@ -2665,21 +2665,14 @@ const populateReceiptTemplate = (saleData) => {
   if (itemsBodyEl) {
     let tbodyHtml = '';
     (saleData.items || []).forEach((item, index) => {
-      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name) || {};
-      const wholesale = prod.wholesalePrice || 0;
-      const retail = prod.sellPrice || item.price || 0;
-      const uPerCarton = prod.unitsPerCarton || 0;
       const rowTotal = item.price * item.qty;
-      
       tbodyHtml += `
         <tr>
-          <td style="border: 1px solid #000; padding: 2px;">${index + 1}</td>
-          <td style="border: 1px solid #000; padding: 2px; text-align: right;">${item.name}</td>
-          <td style="border: 1px solid #000; padding: 2px;">${item.qty}</td>
-          <td style="border: 1px solid #000; padding: 2px;">${fmt(wholesale)} د.ع</td>
-          <td style="border: 1px solid #000; padding: 2px;">${fmt(retail)} د.ع</td>
-          <td style="border: 1px solid #000; padding: 2px;">${uPerCarton}</td>
-          <td style="border: 1px solid #000; padding: 2px;">${fmt(rowTotal)} د.ع</td>
+          <td style="border: 1px solid #000; padding: 2px; font-size: 20px;">${index + 1}</td>
+          <td style="border: 1px solid #000; padding: 2px; font-size: 20px; text-align: right; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${item.name}</td>
+          <td style="border: 1px solid #000; padding: 2px; font-size: 20px;">${item.qty}</td>
+          <td style="border: 1px solid #000; padding: 2px; font-size: 20px;">${fmt(item.price)} د.ع</td>
+          <td style="border: 1px solid #000; padding: 2px; font-size: 20px; font-weight: bold;">${fmt(rowTotal)} د.ع</td>
         </tr>
       `;
     });
