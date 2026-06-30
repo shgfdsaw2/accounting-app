@@ -2846,18 +2846,13 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     const fmt = (n) => Math.round(n).toLocaleString('en-US');
     
-    const center = (text, fontSize, isBold = true) => {
+    const center = (text, fontSize, isBold = false) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
-      let textWidth = ctx.measureText(text).width;
-      let actualSize = fontSize;
-      while (textWidth > RAWBT_PRINT_WIDTH_PX - 30 && actualSize > 12) {
-        actualSize -= 1;
-        ctx.font = `${isBold ? 'bold ' : ''}${actualSize}px Cairo, sans-serif`;
-        textWidth = ctx.measureText(text).width;
-      }
-      const x = (RAWBT_PRINT_WIDTH_PX - textWidth) / 2;
-      ctx.fillText(text, x, y);
-      y += actualSize + 8;
+      ctx.textAlign = 'center';
+      ctx.direction = 'rtl';
+      ctx.fillText(text, RAWBT_PRINT_WIDTH_PX / 2, y);
+      ctx.textAlign = 'right';
+      y += fontSize + 4;
     };
     
     const rowLR = (leftText, rightText, fontSize, isBold = true) => {
@@ -2981,7 +2976,15 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     dashedLine();
     
-    center("19/10 JEKOR جيكور", 22, true);
+    center("جيكور", 22, true);
+    
+    ctx.font = '20px Cairo, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.direction = 'ltr';
+    ctx.fillText("JEKOR - 19/10", RAWBT_PRINT_WIDTH_PX / 2, y);
+    ctx.textAlign = 'right';
+    ctx.direction = 'rtl';
+    y += 24;
     center("الخطأ والسهو مرجوع للطرفين", 22, true);
     
     y += 20;
