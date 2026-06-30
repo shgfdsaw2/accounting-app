@@ -179,6 +179,7 @@ function getProductsData(ss) {
       var sellPrice = parseFloat(prodData[j][3]) || 0; // Col D: Sell Price (سعر البيع) -> wholesalePrice
       var wholesalePrice = parseFloat(prodData[j][4]) || 0; // Col E: Wholesale Price (سعر الجملة) -> sellPrice
       var category = prodData[j][5] || "";
+      var unitsPerCarton = parseInt(prodData[j][6]) || 0; // Col G: unitsPerCarton
       var quantity = stockMap[name] !== undefined ? stockMap[name] : 0;
       
       products.push({
@@ -189,7 +190,8 @@ function getProductsData(ss) {
         sellPrice: wholesalePrice,
         price: wholesalePrice, // default retail price for compatibility
         category: category,
-        quantity: quantity
+        quantity: quantity,
+        unitsPerCarton: unitsPerCarton
       });
     }
   }
@@ -201,14 +203,15 @@ function addProductRaw(ss, data) {
   var stockSheet = ss.getSheetByName("المخزون");
   if (!prodSheet || !stockSheet) return;
   
-  // Name, Barcode, Buy Price, Sell Price (Standard Sale), Wholesale Price (Retail), Category
+  // Name, Barcode, Buy Price, Sell Price (Standard Sale), Wholesale Price (Retail), Category, Units per Carton
   prodSheet.appendRow([
     data.name,
     data.barcode || "",
     parseFloat(data.buyPrice) || 0,
     parseFloat(data.wholesalePrice) || 0,
     parseFloat(data.sellPrice) || 0,
-    data.category || ""
+    data.category || "",
+    parseInt(data.unitsPerCarton) || 0
   ]);
   
   // Name, Quantity
@@ -227,13 +230,14 @@ function updateProductRaw(ss, oldName, data) {
   var prodValues = prodSheet.getDataRange().getValues();
   for (var i = 1; i < prodValues.length; i++) {
     if (prodValues[i][0] === oldName) {
-      prodSheet.getRange(i + 1, 1, 1, 6).setValues([[
+      prodSheet.getRange(i + 1, 1, 1, 7).setValues([[
         data.name,
         data.barcode || "",
         parseFloat(data.buyPrice) || 0,
         parseFloat(data.wholesalePrice) || 0,
         parseFloat(data.sellPrice) || 0,
-        data.category || ""
+        data.category || "",
+        parseInt(data.unitsPerCarton) || 0
       ]]);
       break;
     }

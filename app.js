@@ -721,6 +721,7 @@ const editPBuy = document.getElementById('edit-p-buy');
 const editPWholesale = document.getElementById('edit-p-wholesale');
 const editPCategory = document.getElementById('edit-p-category');
 const editPQty = document.getElementById('edit-p-qty');
+const editPUnitsPerCarton = document.getElementById('edit-p-units-per-carton');
 
 const editCustomerModal = document.getElementById('edit-customer-modal');
 const editCustomerClose = document.getElementById('edit-customer-close');
@@ -2481,6 +2482,7 @@ const openEditProductModal = (product) => {
   if (editPWholesale) editPWholesale.value = product.wholesalePrice !== undefined ? product.wholesalePrice : 0;
   if (editPCategory) editPCategory.value = product.category || 'الغذائيات';
   if (editPQty) editPQty.value = product.quantity;
+  if (editPUnitsPerCarton) editPUnitsPerCarton.value = product.unitsPerCarton || '';
   
   if (editProductModal) {
     editProductModal.classList.remove('hidden');
@@ -2824,6 +2826,181 @@ const generatePrintReceipt = (sale, customer) => {
       <p style="font-size: 10px; margin-top: 15px;">شكراً لتعاملكم معنا!</p>
     </div>
   `;
+};
+
+const RAWBT_PRINT_WIDTH_PX = 384;
+
+const buildReceiptCanvas = (saleData, customerOverride) => {
+  const scratchCanvas = document.createElement('canvas');
+  scratchCanvas.width = RAWBT_PRINT_WIDTH_PX;
+  const mctx = scratchCanvas.getContext('2d');
+  
+  const drawReceipt = (ctx) => {
+    let y = 10;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, RAWBT_PRINT_WIDTH_PX, 10000);
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'top';
+    
+    const fmt = (n) => Math.round(n).toLocaleString('en-US');
+    
+    const center = (text, fontSize, isBold = false) => {
+      ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
+      const textWidth = ctx.measureText(text).width;
+      const x = (RAWBT_PRINT_WIDTH_PX - textWidth) / 2;
+      ctx.fillText(text, x, y);
+      y += fontSize + 4;
+    };
+    
+    const rowLR = (leftText, rightText, fontSize, isBold = false) => {
+      ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
+      ctx.textAlign = 'right';
+      ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 10, y);
+      ctx.textAlign = 'left';
+      ctx.fillText(leftText, 10, y);
+      ctx.textAlign = 'right';
+      y += fontSize + 4;
+    };
+    
+    const dashedLine = () => {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.moveTo(10, y + 2);
+      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 10, y + 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      y += 8;
+    };
+    
+    // HEADER SECTION
+    center("شركة فستقه للمنتجات الغذائيه المحدوده", 15, true);
+    
+    let effectiveCustomer = customerOverride;
+    if (!effectiveCustomer && saleData.customerName) {
+      effectiveCustomer = customers.find(c => c.name === saleData.customerName);
+    }
+    
+    const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
+    center(custName, 12, true);
+    
+    rowLR(saleData.invoiceId, "رقم الفاتورة:", 11, false);
+    
+    if (effectiveCustomer && effectiveCustomer.Latitude && effectiveCustomer.Longitude && parseFloat(effectiveCustomer.Latitude) !== 0 && parseFloat(effectiveCustomer.Longitude) !== 0) {
+      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 11, false);
+    }
+    
+    const now = new Date();
+    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
+    rowLR(dateTimeStr, "التاريخ والوقت:", 11, false);
+    
+    dashedLine();
+    
+    // ITEMS TABLE
+    (saleData.items || []).forEach(item => {
+      ctx.font = 'bold 11px Cairo, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 10, y);
+      y += 15;
+      
+      let qtyText = `العدد: ${item.qty} | السعر المفرد: ${fmt(item.price)} د.ع`;
+      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
+      if (prod && prod.unitsPerCarton && prod.unitsPerCarton > 0) {
+        qtyText += ` | القطع بالكرتون: ${prod.unitsPerCarton}`;
+      }
+      
+      ctx.font = '10px Cairo, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 15, y);
+      y += 14;
+      
+      const lineTotal = item.price * item.qty;
+      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 10, false);
+      y += 4;
+    });
+    
+    dashedLine();
+    
+    // FOOTER SECTION
+    const subtotal = saleData.subtotal || saleData.totalAmount || 0;
+    const discount = saleData.discount || 0;
+    const netTotal = Math.max(0, subtotal - discount);
+    const received = saleData.receivedAmount || 0;
+    const remaining = Math.max(0, netTotal - received);
+    
+    rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 11, false);
+    if (discount > 0) {
+      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 11, false);
+      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 11, true);
+    }
+    rowLR(`${fmt(received)} د.ع`, "المدفوع:", 11, false);
+    rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 11, false);
+    
+    dashedLine();
+    
+    let currentCustomerDebt = 0;
+    if (effectiveCustomer) {
+      const updatedCust = customers.find(c => c.id === effectiveCustomer.id || c.name === effectiveCustomer.name);
+      if (updatedCust) {
+        currentCustomerDebt = updatedCust.debt || 0;
+      } else {
+        currentCustomerDebt = effectiveCustomer.debt || 0;
+      }
+    }
+    const previousDebt = Math.max(0, currentCustomerDebt - remaining);
+    const finalDebt = previousDebt + remaining;
+    
+    rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 11, false);
+    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 13, true);
+    
+    dashedLine();
+    
+    center("19/10 JEKOR جيكور", 10, false);
+    center("الخطأ والسهو مرجوع للطرفين", 10, false);
+    
+    y += 10;
+    return y;
+  };
+  
+  const height = drawReceipt(mctx);
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = RAWBT_PRINT_WIDTH_PX;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, RAWBT_PRINT_WIDTH_PX, height);
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'top';
+  
+  drawReceipt(ctx);
+  return canvas;
+};
+
+const printThermalViaRawBT = (saleData) => {
+  try {
+    const canvas = buildReceiptCanvas(saleData);
+    sendCanvasToRawBT(canvas);
+  } catch (err) {
+    console.error("printThermalViaRawBT error:", err);
+    showArabicToast("فشل تحضير الطباعة الحرارية", "error");
+  }
+};
+
+const sendCanvasToRawBT = (canvas) => {
+  try {
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64Data = dataUrl.split(',')[1];
+    const rawbtUrl = "rawbt:base64," + base64Data;
+    window.location.href = rawbtUrl;
+  } catch (err) {
+    console.error("sendCanvasToRawBT error:", err);
+    showArabicToast("فشل إرسال الفاتورة إلى طابعة RawBT", "error");
+  }
 };
 
 const generateWhatsAppMessage = (sale, customer) => {
@@ -3825,9 +4002,15 @@ if (productForm) {
     const sellPrice = parseFloat(document.getElementById('p-sell').value) || 0;
     const unit = document.getElementById('p-unit').value;
     const qty = parseInt(document.getElementById('p-qty').value) || 0;
+    const unitsPerCarton = parseInt(document.getElementById('p-units-per-carton').value) || 0;
 
     if (!name || isNaN(sellPrice) || isNaN(wholesalePrice) || isNaN(buyPrice)) {
       showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
+      return;
+    }
+
+    if (!unitsPerCarton || unitsPerCarton < 1) {
+      showArabicToast('الرجاء إدخال عدد القطع داخل الكرتون (الباكيت)', 'error');
       return;
     }
 
@@ -3843,7 +4026,8 @@ if (productForm) {
       costPrice: buyPrice,
       category: 'الغذائيات',
       unit,
-      barcode
+      barcode,
+      unitsPerCarton
     };
 
     inventory.push(newProd);
@@ -3856,7 +4040,8 @@ if (productForm) {
       sellPrice: sellPrice,
       wholesalePrice: wholesalePrice,
       category: unit,
-      quantity: qty
+      quantity: qty,
+      unitsPerCarton: unitsPerCarton
     };
 
     saveAllStatesToLocalStorage();
@@ -3877,32 +4062,39 @@ if (editProductForm) {
     if (!editingProduct) return;
 
     const originalName = editingProduct.name;
-    const newName = editPName.value.trim();
+    const name = editPName.value.trim();
     const barcode = editPBarcode.value.trim();
     const buyPrice = parseFloat(editPBuy.value) || 0;
     const wholesalePrice = parseFloat(editPWholesale.value) || 0;
     const sellPrice = parseFloat(editPSell.value) || 0;
     const category = editPCategory.value.trim();
     const quantity = parseInt(editPQty.value) || 0;
+    const unitsPerCarton = parseInt(editPUnitsPerCarton.value) || 0;
 
-    if (!newName || isNaN(sellPrice) || isNaN(wholesalePrice) || isNaN(buyPrice) || !category) {
+    if (!name || isNaN(sellPrice) || isNaN(wholesalePrice) || isNaN(buyPrice) || !category) {
       showArabicToast('الرجاء إدخال الحقول المطلوبة بشكل صحيح', 'error');
+      return;
+    }
+
+    if (!unitsPerCarton || unitsPerCarton < 1) {
+      showArabicToast('الرجاء إدخال عدد القطع داخل الكرتون (الباكيت)', 'error');
       return;
     }
 
     const payload = {
       action: "updateProduct",
       oldName: originalName,
-      name: newName,
+      name: name,
       barcode: barcode,
       buyPrice: buyPrice,
       sellPrice: sellPrice,
       wholesalePrice: wholesalePrice,
       category: category,
-      quantity: quantity
+      quantity: quantity,
+      unitsPerCarton: unitsPerCarton
     };
 
-    editingProduct.name = newName;
+    editingProduct.name = name;
     editingProduct.barcode = barcode;
     editingProduct.sellPrice = sellPrice;
     editingProduct.price = sellPrice;
@@ -3913,6 +4105,7 @@ if (editProductForm) {
     editingProduct.unit = category;
     editingProduct.qty = quantity;
     editingProduct.quantity = quantity;
+    editingProduct.unitsPerCarton = unitsPerCarton;
 
     editingProduct = null;
     editProductForm.reset();
