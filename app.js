@@ -193,7 +193,8 @@ const renderArchiveResults = (invoices) => {
         status: sale.status || 'مدفوع',
         items: typeof sale.items === 'string' ? JSON.parse(sale.items) : (sale.items || [])
       };
-      printThermalReceipt(normalizedSale);
+      const matchedCustomer = customers.find(c => c.name === sale.customerName) || null;
+      printThermalViaRawBT(normalizedSale, matchedCustomer);
     });
 
     salesHistoryList.appendChild(row);
@@ -2981,9 +2982,12 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
   return canvas;
 };
 
-const printThermalViaRawBT = (saleData) => {
+const printThermalViaRawBT = async (saleData, customerOverride) => {
   try {
-    const canvas = buildReceiptCanvas(saleData);
+    if (document.fonts && document.fonts.ready) {
+      await document.fonts.ready;
+    }
+    const canvas = buildReceiptCanvas(saleData, customerOverride);
     sendCanvasToRawBT(canvas);
   } catch (err) {
     console.error("printThermalViaRawBT error:", err);
@@ -2993,9 +2997,9 @@ const printThermalViaRawBT = (saleData) => {
 
 const sendCanvasToRawBT = (canvas) => {
   try {
-    const dataUrl = canvas.toDataURL('image/png');
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     const base64Data = dataUrl.split(',')[1];
-    const rawbtUrl = "rawbt:base64," + base64Data;
+    const rawbtUrl = "rawbt:data:image/jpeg;base64," + base64Data;
     window.location.href = rawbtUrl;
   } catch (err) {
     console.error("sendCanvasToRawBT error:", err);
@@ -4591,6 +4595,15 @@ if (invoiceOptionsModal) {
 
 if (optPrintBtn) {
   optPrintBtn.addEventListener('click', () => {
+    if (!lastCompletedSale) return;
+    printThermalViaRawBT(lastCompletedSale, lastCompletedCustomer);
+    closeInvoiceOptionsModal();
+  });
+}
+
+const optPrintFallbackBtn = document.getElementById('opt-print-fallback-btn');
+if (optPrintFallbackBtn) {
+  optPrintFallbackBtn.addEventListener('click', () => {
     if (!lastCompletedSale) return;
     populateReceiptTemplate(lastCompletedSale);
     const receiptTemplate = document.getElementById('receiptTemplate');
