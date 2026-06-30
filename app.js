@@ -2809,7 +2809,7 @@ const generatePrintReceipt = (sale, customer) => {
           <span>${discount.toLocaleString()} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-weight: bold;">
-          <span>المطلوب سداده:</span>
+          <span>المطلب سداده:</span>
           <span>${netTotal.toLocaleString()} د.ع</span>
         </div>
         ` : ''}
@@ -2829,7 +2829,7 @@ const generatePrintReceipt = (sale, customer) => {
   `;
 };
 
-const RAWBT_PRINT_WIDTH_PX = 384;
+const RAWBT_PRINT_WIDTH_PX = 576;
 
 const buildReceiptCanvas = (saleData, customerOverride) => {
   const scratchCanvas = document.createElement('canvas');
@@ -2837,7 +2837,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
   const mctx = scratchCanvas.getContext('2d');
   
   const drawReceipt = (ctx) => {
-    let y = 10;
+    let y = 15;
     
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, RAWBT_PRINT_WIDTH_PX, 10000);
@@ -2852,7 +2852,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.direction = 'rtl';
       ctx.fillText(text, RAWBT_PRINT_WIDTH_PX / 2, y);
       ctx.textAlign = 'right';
-      y += fontSize + 4;
+      y += fontSize + 6;
     };
     
     const rowLR = (leftText, rightText, fontSize, isBold = true) => {
@@ -2860,34 +2860,34 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       let leftWidth = ctx.measureText(leftText).width;
       let rightWidth = ctx.measureText(rightText).width;
       let actualSize = fontSize;
-      while (leftWidth + rightWidth > RAWBT_PRINT_WIDTH_PX - 30 && actualSize > 12) {
+      while (leftWidth + rightWidth > RAWBT_PRINT_WIDTH_PX - 45 && actualSize > 18) {
         actualSize -= 1;
         ctx.font = `${isBold ? 'bold ' : ''}${actualSize}px Cairo, sans-serif`;
         leftWidth = ctx.measureText(leftText).width;
         rightWidth = ctx.measureText(rightText).width;
       }
       ctx.textAlign = 'right';
-      ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 15, y);
+      ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 23, y);
       ctx.textAlign = 'left';
-      ctx.fillText(leftText, 15, y);
+      ctx.fillText(leftText, 23, y);
       ctx.textAlign = 'right';
-      y += actualSize + 8;
+      y += actualSize + 12;
     };
     
     const dashedLine = () => {
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4.5;
       ctx.beginPath();
-      ctx.setLineDash([8, 4]);
-      ctx.moveTo(15, y + 2);
-      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 15, y + 2);
+      ctx.setLineDash([12, 6]);
+      ctx.moveTo(23, y + 3);
+      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 23, y + 3);
       ctx.stroke();
       ctx.setLineDash([]);
-      y += 12;
+      y += 18;
     };
     
     // HEADER SECTION
-    center("شركة فستقه للمنتجات الغذائيه المحدوده", 32, true);
+    center("شركة فستقه للمنتجات الغذائيه المحدوده", 48, true);
     
     let effectiveCustomer = customerOverride;
     if (!effectiveCustomer && saleData.customerName) {
@@ -2895,34 +2895,34 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     }
     
     const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
-    center(custName, 26, true);
+    center(custName, 39, true);
     
-    rowLR(saleData.invoiceId, "رقم الفاتورة:", 22, true);
+    rowLR(saleData.invoiceId, "رقم الفاتورة:", 33, true);
     
     if (effectiveCustomer && effectiveCustomer.Latitude && effectiveCustomer.Longitude && parseFloat(effectiveCustomer.Latitude) !== 0 && parseFloat(effectiveCustomer.Longitude) !== 0) {
-      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 22, true);
+      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 33, true);
     }
     
     const now = new Date();
     const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
-    rowLR(dateTimeStr, "التاريخ والوقت:", 22, true);
+    rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
     
     dashedLine();
     
     // ITEMS TABLE
     (saleData.items || []).forEach(item => {
-      ctx.font = 'bold 24px Cairo, sans-serif';
+      ctx.font = 'bold 36px Cairo, sans-serif';
       let nameWidth = ctx.measureText(item.name).width;
-      let itemFontSize = 24;
-      while (nameWidth > RAWBT_PRINT_WIDTH_PX - 30 && itemFontSize > 14) {
+      let itemFontSize = 36;
+      while (nameWidth > RAWBT_PRINT_WIDTH_PX - 45 && itemFontSize > 21) {
         itemFontSize -= 1;
         ctx.font = `bold ${itemFontSize}px Cairo, sans-serif`;
         nameWidth = ctx.measureText(item.name).width;
       }
       ctx.textAlign = 'right';
-      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 15, y);
-      y += itemFontSize + 4;
+      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 23, y);
+      y += itemFontSize + 6;
       
       let qtyText = `العدد: ${item.qty} | السعر المفرد: ${fmt(item.price)} د.ع`;
       const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
@@ -2930,14 +2930,14 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
         qtyText += ` | القطع بالكرتون: ${prod.unitsPerCarton}`;
       }
       
-      ctx.font = 'bold 22px Cairo, sans-serif';
+      ctx.font = 'bold 33px Cairo, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 15, y);
-      y += 26;
+      ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 23, y);
+      y += 39;
       
       const lineTotal = item.price * item.qty;
-      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 24, true);
-      y += 10;
+      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 36, true);
+      y += 15;
     });
     
     dashedLine();
@@ -2949,13 +2949,13 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const received = saleData.receivedAmount || 0;
     const remaining = Math.max(0, netTotal - received);
     
-    rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 22, true);
+    rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 33, true);
     if (discount > 0) {
-      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 22, true);
-      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 24, true);
+      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 33, true);
+      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 36, true);
     }
-    rowLR(`${fmt(received)} د.ع`, "المدفوع:", 22, true);
-    rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 22, true);
+    rowLR(`${fmt(received)} د.ع`, "المدفوع:", 33, true);
+    rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 33, true);
     
     dashedLine();
     
@@ -2971,28 +2971,27 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const previousDebt = Math.max(0, currentCustomerDebt - remaining);
     const finalDebt = previousDebt + remaining;
     
-    rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 24, true);
-    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 24, true);
+    rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 36, true);
+    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 36, true);
     
     dashedLine();
     
-    center("جيكور", 22, true);
+    center("جيكور", 33, true);
     
-    ctx.font = '20px Cairo, sans-serif';
+    ctx.font = '30px Cairo, sans-serif';
     ctx.textAlign = 'center';
     ctx.direction = 'ltr';
     ctx.fillText("JEKOR - 19/10", RAWBT_PRINT_WIDTH_PX / 2, y);
     ctx.textAlign = 'right';
     ctx.direction = 'rtl';
-    y += 24;
-    center("الخطأ والسهو مرجوع للطرفين", 22, true);
+    y += 36;
+    center("الخطأ والسهو مرجوع للطرفين", 33, true);
     
-    y += 20;
+    y += 30;
     return y;
   };
   
   const height = drawReceipt(mctx);
-  
   const canvas = document.createElement('canvas');
   canvas.width = RAWBT_PRINT_WIDTH_PX;
   canvas.height = height;
