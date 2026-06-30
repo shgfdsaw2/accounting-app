@@ -41,12 +41,30 @@ const printThermalReceipt = (saleData) => {
   const thermalReceipt = document.getElementById('thermalReceipt');
   if (!thermalReceipt) return;
 
-  const itemsHtml = (saleData.items || []).map(item => `
-    <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 2px;">
-      <span>${item.name} x${item.qty}</span>
-      <span>${(item.price * item.qty).toLocaleString()} د.ع</span>
-    </div>
-  `).join('');
+  const itemsHtml = (saleData.items || []).map(item => {
+    const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
+    const wholesalePrice = prod ? (prod.wholesalePrice || 0) : 0;
+    const retailPrice = item.price || (prod ? prod.sellPrice || prod.price || 0 : 0);
+    const unitsPerCarton = prod ? (prod.unitsPerCarton || '-') : '-';
+    const rowTotal = item.price * item.qty;
+    
+    return `
+      <div style="margin-bottom: 8px; border-bottom: 1px dotted #000; padding-bottom: 4px; direction: rtl; text-align: right;">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: bold;">
+          <span>${item.name}</span>
+          <span>${fmt(rowTotal)} د.ع</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
+          <span>الكمية: ${item.qty}</span>
+          <span>القطع بالكرتون: ${unitsPerCarton}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #555;">
+          <span>سعر الجملة: ${fmt(wholesalePrice)} د.ع</span>
+          <span>سعر المفرد: ${fmt(retailPrice)} د.ع</span>
+        </div>
+      </div>
+    `;
+  }).join('');
 
   thermalReceipt.innerHTML = `
     <div style="font-family: 'Cairo', sans-serif; direction: rtl; width: 80mm; padding: 10px; background: white; color: black; box-sizing: border-box;">
@@ -62,7 +80,7 @@ const printThermalReceipt = (saleData) => {
       </div>
       
       <div style="margin-bottom: 8px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
-        <div style="font-size: 10px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 3px;">
+        <div style="font-size: 10px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 5px;">
           <span>المادة والكمية</span>
           <span>السعر</span>
         </div>
@@ -72,19 +90,19 @@ const printThermalReceipt = (saleData) => {
       <div style="font-size: 11px; font-weight: bold;">
         <div style="display: flex; justify-content: space-between;">
           <span>المجموع الفرعي:</span>
-          <span>${(saleData.subtotal || saleData.totalAmount || 0).toLocaleString()} د.ع</span>
+          <span>${fmt(saleData.subtotal || saleData.totalAmount || 0)} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span>الخصم:</span>
-          <span>${(saleData.discount || 0).toLocaleString()} د.ع</span>
+          <span>${fmt(saleData.discount || 0)} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px; border-top: 1px solid #000; padding-top: 3px;">
           <span>المجموع الكلي:</span>
-          <span>${(saleData.totalAmount || 0).toLocaleString()} د.ع</span>
+          <span>${fmt(saleData.totalAmount || 0)} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px;">
           <span>المستلم:</span>
-          <span>${(saleData.receivedAmount || 0).toLocaleString()} د.ع</span>
+          <span>${fmt(saleData.receivedAmount || 0)} د.ع</span>
         </div>
       </div>
       
@@ -2758,13 +2776,20 @@ const generatePrintReceipt = (sale, customer) => {
   
   let itemsHtml = '';
   sale.items.forEach(item => {
+    const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
+    const wholesalePrice = prod ? (prod.wholesalePrice || 0) : 0;
+    const retailPrice = item.price || (prod ? prod.sellPrice || prod.price || 0 : 0);
+    const unitsPerCarton = prod ? (prod.unitsPerCarton || '-') : '-';
     const rowTotal = item.price * item.qty;
+    
     itemsHtml += `
-      <tr style="border-bottom: 1px dashed #ccc;">
-        <td style="padding: 5px 0; text-align: right;">${item.name}</td>
-        <td style="padding: 5px 0; text-align: center;">${item.qty}</td>
-        <td style="padding: 5px 0; text-align: center;">${item.price.toLocaleString()}</td>
-        <td style="padding: 5px 0; text-align: left;">${rowTotal.toLocaleString()} د.ع</td>
+      <tr style="border-bottom: 1px dashed #ccc; font-size: 10px;">
+        <td style="padding: 4px 2px; text-align: right;">${item.name}</td>
+        <td style="padding: 4px 2px; text-align: center;">${item.qty}</td>
+        <td style="padding: 4px 2px; text-align: center;">${fmt(wholesalePrice)} د.ع</td>
+        <td style="padding: 4px 2px; text-align: center;">${fmt(retailPrice)} د.ع</td>
+        <td style="padding: 4px 2px; text-align: center;">${unitsPerCarton}</td>
+        <td style="padding: 4px 2px; text-align: left; font-weight: bold;">${fmt(rowTotal)} د.ع</td>
       </tr>
     `;
   });
@@ -2790,13 +2815,15 @@ const generatePrintReceipt = (sale, customer) => {
       
       <hr style="border-top: 1px dashed #000; margin: 10px 0;">
       
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
         <thead>
           <tr style="border-bottom: 1px dashed #000;">
-            <th style="text-align: right; padding-bottom: 5px;">المادة</th>
-            <th style="text-align: center; padding-bottom: 5px;">العدد</th>
-            <th style="text-align: center; padding-bottom: 5px;">السعر</th>
-            <th style="text-align: left; padding-bottom: 5px;">المجموع</th>
+            <th style="text-align: right; padding: 4px 2px;">اسم المادة</th>
+            <th style="text-align: center; padding: 4px 2px;">العدد</th>
+            <th style="text-align: center; padding: 4px 2px;">الجملة</th>
+            <th style="text-align: center; padding: 4px 2px;">المفرد</th>
+            <th style="text-align: center; padding: 4px 2px;">القطع/كرتون</th>
+            <th style="text-align: left; padding: 4px 2px;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
@@ -2809,25 +2836,25 @@ const generatePrintReceipt = (sale, customer) => {
       <div style="text-align: right; font-size: 11px; line-height: 1.6;">
         <div style="display: flex; justify-content: space-between;">
           <span>إجمالي القائمة:</span>
-          <span>${subtotal.toLocaleString()} د.ع</span>
+          <span>${fmt(subtotal)} د.ع</span>
         </div>
         ${discount > 0 ? `
         <div style="display: flex; justify-content: space-between;">
           <span>الخصم:</span>
-          <span>${discount.toLocaleString()} د.ع</span>
+          <span>${fmt(discount)} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between; font-weight: bold;">
           <span>المطلب سداده:</span>
-          <span>${netTotal.toLocaleString()} د.ع</span>
+          <span>${fmt(netTotal)} د.ع</span>
         </div>
         ` : ''}
         <div style="display: flex; justify-content: space-between;">
           <span>المبلغ المدفوع:</span>
-          <span>${received.toLocaleString()} د.ع</span>
+          <span>${fmt(received)} د.ع</span>
         </div>
         <div style="display: flex; justify-content: space-between; color: red;">
           <span>المتبقي دين للشركة:</span>
-          <span>${remaining.toLocaleString()} د.ع</span>
+          <span>${fmt(remaining)} د.ع</span>
         </div>
       </div>
       
@@ -2929,45 +2956,28 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     dashedLine();
     
     // ITEMS TABLE
-    (saleData.items || []).forEach((item, index) => {
-      ctx.font = 'bold 36px Cairo, sans-serif';
-      let nameWidth = ctx.measureText(item.name).width;
-      let itemFontSize = 36;
-      while (nameWidth > RAWBT_PRINT_WIDTH_PX - 45 && itemFontSize > 21) {
-        itemFontSize -= 1;
-        ctx.font = `bold ${itemFontSize}px Cairo, sans-serif`;
-        nameWidth = ctx.measureText(item.name).width;
-      }
+    (saleData.items || []).forEach(item => {
+      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
+      const wholesalePrice = prod ? (prod.wholesalePrice || 0) : 0;
+      const retailPrice = item.price || (prod ? prod.sellPrice || prod.price || 0 : 0);
+      const unitsPerCarton = prod ? (prod.unitsPerCarton || 0) : 0;
+      const rowTotal = item.price * item.qty;
+      
+      ctx.font = 'bold 24px Cairo, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 23, y);
-      y += itemFontSize + 6;
+      y += 30;
       
-      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name) || {};
-      const wholesale = prod.wholesalePrice || 0;
-      const retail = prod.sellPrice || item.price || 0;
-      const uPerCarton = prod.unitsPerCarton || 0;
+      rowLR(item.qty.toString(), "الكمية:", 22, true);
+      rowLR(`${fmt(wholesalePrice)} د.ع`, "سعر الجملة:", 22, true);
+      rowLR(`${fmt(retailPrice)} د.ع`, "سعر المفرد:", 22, true);
       
-      const qtyText = `العدد: ${item.qty} | الجملة: ${fmt(wholesale)} د.ع | المفرد: ${fmt(retail)} د.ع | القطع/كرتون: ${uPerCarton}`;
-      
-      ctx.font = 'bold 33px Cairo, sans-serif';
-      let qtyTextWidth = ctx.measureText(qtyText).width;
-      let qtyFontSize = 33;
-      while (qtyTextWidth > RAWBT_PRINT_WIDTH_PX - 46 && qtyFontSize > 16) {
-        qtyFontSize -= 1;
-        ctx.font = `bold ${qtyFontSize}px Cairo, sans-serif`;
-        qtyTextWidth = ctx.measureText(qtyText).width;
+      if (unitsPerCarton > 0) {
+        rowLR(unitsPerCarton.toString(), "القطع بالكرتون:", 22, true);
       }
-      ctx.textAlign = 'right';
-      ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 23, y);
-      y += qtyFontSize + 6;
       
-      const lineTotal = item.price * item.qty;
-      rowLR(`${fmt(lineTotal)} د.ع`, "الإجمالي:", 36, true);
-      y += 15;
-      
-      if (index < (saleData.items || []).length - 1) {
-        smallDashedLine();
-      }
+      rowLR(`${fmt(rowTotal)} د.ع`, "الإجمالي:", 24, true);
+      y += 6;
     });
     
     dashedLine();
