@@ -2846,38 +2846,38 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     const fmt = (n) => Math.round(n).toLocaleString('en-US');
     
-    const center = (text, fontSize, isBold = false) => {
+    const center = (text, fontSize, isBold = true) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
       const textWidth = ctx.measureText(text).width;
       const x = (RAWBT_PRINT_WIDTH_PX - textWidth) / 2;
       ctx.fillText(text, x, y);
-      y += fontSize + 4;
+      y += fontSize + 6;
     };
     
-    const rowLR = (leftText, rightText, fontSize, isBold = false) => {
+    const rowLR = (leftText, rightText, fontSize, isBold = true) => {
       ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
       ctx.textAlign = 'right';
       ctx.fillText(rightText, RAWBT_PRINT_WIDTH_PX - 10, y);
       ctx.textAlign = 'left';
       ctx.fillText(leftText, 10, y);
       ctx.textAlign = 'right';
-      y += fontSize + 4;
+      y += fontSize + 6;
     };
     
     const dashedLine = () => {
       ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.setLineDash([4, 4]);
+      ctx.setLineDash([6, 4]);
       ctx.moveTo(10, y + 2);
       ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 10, y + 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      y += 8;
+      y += 10;
     };
     
     // HEADER SECTION
-    center("شركة فستقه للمنتجات الغذائيه المحدوده", 15, true);
+    center("شركة فستقه للمنتجات الغذائيه المحدوده", 20, true);
     
     let effectiveCustomer = customerOverride;
     if (!effectiveCustomer && saleData.customerName) {
@@ -2885,27 +2885,27 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     }
     
     const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
-    center(custName, 12, true);
+    center(custName, 17, true);
     
-    rowLR(saleData.invoiceId, "رقم الفاتورة:", 11, false);
+    rowLR(saleData.invoiceId, "رقم الفاتورة:", 15, true);
     
     if (effectiveCustomer && effectiveCustomer.Latitude && effectiveCustomer.Longitude && parseFloat(effectiveCustomer.Latitude) !== 0 && parseFloat(effectiveCustomer.Longitude) !== 0) {
-      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 11, false);
+      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 15, true);
     }
     
     const now = new Date();
     const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
-    rowLR(dateTimeStr, "التاريخ والوقت:", 11, false);
+    rowLR(dateTimeStr, "التاريخ والوقت:", 15, true);
     
     dashedLine();
     
     // ITEMS TABLE
     (saleData.items || []).forEach(item => {
-      ctx.font = 'bold 11px Cairo, sans-serif';
+      ctx.font = 'bold 16px Cairo, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 10, y);
-      y += 15;
+      y += 20;
       
       let qtyText = `العدد: ${item.qty} | السعر المفرد: ${fmt(item.price)} د.ع`;
       const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
@@ -2913,14 +2913,14 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
         qtyText += ` | القطع بالكرتون: ${prod.unitsPerCarton}`;
       }
       
-      ctx.font = '10px Cairo, sans-serif';
+      ctx.font = 'bold 14px Cairo, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(qtyText, RAWBT_PRINT_WIDTH_PX - 15, y);
-      y += 14;
+      y += 18;
       
       const lineTotal = item.price * item.qty;
-      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 10, false);
-      y += 4;
+      rowLR(`${fmt(lineTotal)} د.ع`, "السعر الإجمالي:", 14, true);
+      y += 6;
     });
     
     dashedLine();
@@ -2932,13 +2932,13 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const received = saleData.receivedAmount || 0;
     const remaining = Math.max(0, netTotal - received);
     
-    rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 11, false);
+    rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 15, true);
     if (discount > 0) {
-      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 11, false);
-      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 11, true);
+      rowLR(`${fmt(discount)} د.ع`, "الخصم:", 15, true);
+      rowLR(`${fmt(netTotal)} د.ع`, "المطلوب سداده:", 16, true);
     }
-    rowLR(`${fmt(received)} د.ع`, "المدفوع:", 11, false);
-    rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 11, false);
+    rowLR(`${fmt(received)} د.ع`, "المدفوع:", 15, true);
+    rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", 15, true);
     
     dashedLine();
     
@@ -2954,15 +2954,15 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const previousDebt = Math.max(0, currentCustomerDebt - remaining);
     const finalDebt = previousDebt + remaining;
     
-    rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 11, false);
-    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 13, true);
+    rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 15, true);
+    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 18, true);
     
     dashedLine();
     
-    center("19/10 JEKOR جيكور", 10, false);
-    center("الخطأ والسهو مرجوع للطرفين", 10, false);
+    center("19/10 JEKOR جيكور", 14, false);
+    center("الخطأ والسهو مرجوع للطرفين", 14, false);
     
-    y += 10;
+    y += 15;
     return y;
   };
   
@@ -4594,11 +4594,11 @@ if (invoiceOptionsModal) {
 }
 
 if (optPrintBtn) {
-  optPrintBtn.addEventListener('click', () => {
-    if (!lastCompletedSale) return;
-    printThermalViaRawBT(lastCompletedSale, lastCompletedCustomer);
-    closeInvoiceOptionsModal();
-  });
+    optPrintBtn.addEventListener('click', () => {
+        if (!lastCompletedSale) return;
+        printThermalViaRawBT(lastCompletedSale, lastCompletedCustomer);
+        closeInvoiceOptionsModal();
+    });
 }
 
 const optPrintFallbackBtn = document.getElementById('opt-print-fallback-btn');

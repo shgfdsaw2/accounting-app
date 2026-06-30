@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smart-pos-cache-v4';
+const CACHE_NAME = 'smart-pos-cache-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
