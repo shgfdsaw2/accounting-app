@@ -502,33 +502,80 @@ body {
 
 @media print {
   body.thermal-print-mode * { visibility: hidden !important; }
-  body.thermal-print-mode #receiptTemplate, body.thermal-print-mode #receiptTemplate * { visibility: visible !important; color: #000 !important; }
+  body.thermal-print-mode #receiptTemplate, body.thermal-print-mode #receiptTemplate * { 
+    visibility: visible !important; 
+    color: #000 !important; 
+    font-weight: bold !important;
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+  }
   body.thermal-print-mode #receiptTemplate { 
     position: absolute !important; 
     left: 0 !important; 
     top: 0 !important; 
-    width: 384px !important; 
-    margin: 0 !important; 
-    padding: 10px 15px !important; 
+    width: 100% !important; 
+    max-width: 384px !important; 
+    margin: 0 auto !important; 
+    direction: rtl !important; 
+    display: flex !important; 
+    flex-direction: column !important; 
+    align-items: stretch !important; 
+    padding: 0 10px !important; 
     box-sizing: border-box !important; 
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-    white-space: normal !important;
     color: #000 !important;
     background: #fff !important;
+    font-size: 26px !important;
   }
-  body.thermal-print-mode #receiptTemplate * { 
-    visibility: visible !important; 
-    color: #000 !important; 
-    word-wrap: break-word !important;
-    overflow-wrap: break-word !important;
-    white-space: normal !important;
-  }
+  
   #receiptTemplate .receipt-header, #receiptTemplate .receipt-footer {
     text-align: center !important;
+    width: 100% !important;
+    display: block !important;
   }
+  
+  #receiptTemplate h3, #receiptTemplate h4 {
+    font-size: 34px !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    margin: 5px 0 !important;
+  }
+  
+  #receiptTemplate table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 12px !important;
+    font-size: 26px !important;
+  }
+  
+  #receiptTemplate tr {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 1px dashed #000 !important;
+    padding: 6px 0 !important;
+  }
+  
+  #receiptTemplate td, #receiptTemplate th {
+    border: none !important;
+    padding: 4px 0 !important;
+    font-size: 26px !important;
+  }
+  
+  #receiptTemplate table:nth-of-type(2) th, #receiptTemplate table:nth-of-type(2) td {
+    display: inline-block !important;
+    font-size: 24px !important;
+  }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(1), #receiptTemplate table:nth-of-type(2) td:nth-child(1) { width: 10% !important; text-align: right !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(2), #receiptTemplate table:nth-of-type(2) td:nth-child(2) { width: 40% !important; text-align: right !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(3), #receiptTemplate table:nth-of-type(2) td:nth-child(3) { width: 20% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(4), #receiptTemplate table:nth-of-type(2) td:nth-child(4) { width: 10% !important; text-align: center !important; }
+  #receiptTemplate table:nth-of-type(2) th:nth-child(5), #receiptTemplate table:nth-of-type(2) td:nth-child(5) { width: 20% !important; text-align: left !important; }
+  
+  #receiptTemplate table:nth-of-type(3) td {
+    font-size: 24px !important;
+  }
+  
   @page { size: 80mm auto; margin: 0; }
 }
-
-
-
