@@ -3039,6 +3039,9 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     ctx.textBaseline = 'middle';
     
     cols.forEach(col => {
+      const labelMaxWidth = col.width - 16;
+      const labelSize = fitCellText(col.label, labelMaxWidth, SIZE_BODY, true);
+      ctx.font = `900 ${labelSize}px Cairo, sans-serif`;
       ctx.textAlign = col.align;
       let textX;
       if (col.align === 'center') {
@@ -3107,7 +3110,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       const totalSize = fitCellText(totalText, 79, SIZE_BODY, true);
       ctx.font = `900 ${totalSize}px Cairo, sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(totalText, cols[0].x + 8, y + (rowHeight - SIZE_BODY) / 2);
+      ctx.fillText(totalText, cols[0].x + 8, y + (rowHeight - totalSize) / 2);
       
       y += rowHeight;
     });
@@ -3138,7 +3141,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const grandTotalSize = fitCellText(grandTotalText, 79, SIZE_BODY, true);
     ctx.font = `900 ${grandTotalSize}px Cairo, sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(grandTotalText, 23 + 8, y + (summaryRowHeight - SIZE_BODY) / 2);
+    ctx.fillText(grandTotalText, 23 + 8, y + (summaryRowHeight - grandTotalSize) / 2);
     
     y += summaryRowHeight;
     
