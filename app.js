@@ -2955,6 +2955,16 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       y += 22;
     };
     
+    const fitCellText = (text, maxWidth, baseFontSize, isBold = true) => {
+      let size = baseFontSize;
+      ctx.font = `${isBold ? '900' : '700'} ${size}px Cairo, sans-serif`;
+      while (ctx.measureText(text).width > maxWidth && size > 14) {
+        size -= 1;
+        ctx.font = `${isBold ? '900' : '700'} ${size}px Cairo, sans-serif`;
+      }
+      return size;
+    };
+    
     const cols = [
       { x: 23, width: 95, align: 'left', label: 'الإجمالي' },
       { x: 118, width: 90, align: 'center', label: 'السعر' },
@@ -3061,14 +3071,17 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
         ctx.stroke();
       }
       
-      ctx.font = `900 ${SIZE_BODY}px Cairo, sans-serif`;
       ctx.direction = 'rtl';
       
       // Col 5: Index
+      const idxText = (index + 1).toString();
+      const idxSize = fitCellText(idxText, 29, SIZE_BODY, true);
+      ctx.font = `900 ${idxSize}px Cairo, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText((index + 1).toString(), cols[4].x + cols[4].width / 2, y + (rowHeight - SIZE_BODY) / 2);
+      ctx.fillText(idxText, cols[4].x + cols[4].width / 2, y + (rowHeight - SIZE_BODY) / 2);
       
       // Col 4: Name (multiline)
+      ctx.font = `900 ${SIZE_BODY}px Cairo, sans-serif`;
       ctx.textAlign = 'right';
       const nameYStart = y + (rowHeight - nameLines.length * 28) / 2;
       nameLines.forEach((line, lineIdx) => {
@@ -3076,16 +3089,25 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       });
       
       // Col 3: Qty
+      const qtyText = item.qty.toString();
+      const qtySize = fitCellText(qtyText, 79, SIZE_BODY, true);
+      ctx.font = `900 ${qtySize}px Cairo, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(item.qty.toString(), cols[2].x + cols[2].width / 2, y + (rowHeight - SIZE_BODY) / 2);
+      ctx.fillText(qtyText, cols[2].x + cols[2].width / 2, y + (rowHeight - SIZE_BODY) / 2);
       
       // Col 2: Price
+      const priceText = fmt(item.price);
+      const priceSize = fitCellText(priceText, 74, SIZE_BODY, true);
+      ctx.font = `900 ${priceSize}px Cairo, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(fmt(item.price), cols[1].x + cols[1].width / 2, y + (rowHeight - SIZE_BODY) / 2);
+      ctx.fillText(priceText, cols[1].x + cols[1].width / 2, y + (rowHeight - SIZE_BODY) / 2);
       
       // Col 1: Total
+      const totalText = fmt(item.price * item.qty);
+      const totalSize = fitCellText(totalText, 79, SIZE_BODY, true);
+      ctx.font = `900 ${totalSize}px Cairo, sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(fmt(item.price * item.qty), cols[0].x + 8, y + (rowHeight - SIZE_BODY) / 2);
+      ctx.fillText(totalText, cols[0].x + 8, y + (rowHeight - SIZE_BODY) / 2);
       
       y += rowHeight;
     });
@@ -3102,17 +3124,21 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.stroke();
     });
     
-    ctx.font = `900 ${SIZE_BODY}px Cairo, sans-serif`;
     ctx.direction = 'rtl';
     
     const totalQty = (saleData.items || []).reduce((sum, item) => sum + (parseInt(item.qty) || 0), 0);
     const qtyLabelText = `قطعة ${totalQty}`;
+    const qtyLabelSize = fitCellText(qtyLabelText, 234, SIZE_BODY, true);
+    ctx.font = `900 ${qtyLabelSize}px Cairo, sans-serif`;
     ctx.textAlign = 'right';
     ctx.fillText(qtyLabelText, 553 - 8, y + (summaryRowHeight - SIZE_BODY) / 2);
     
     const grandTotal = (saleData.items || []).reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const grandTotalText = fmt(grandTotal);
+    const grandTotalSize = fitCellText(grandTotalText, 79, SIZE_BODY, true);
+    ctx.font = `900 ${grandTotalSize}px Cairo, sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(fmt(grandTotal), 23 + 8, y + (summaryRowHeight - SIZE_BODY) / 2);
+    ctx.fillText(grandTotalText, 23 + 8, y + (summaryRowHeight - SIZE_BODY) / 2);
     
     y += summaryRowHeight;
     
