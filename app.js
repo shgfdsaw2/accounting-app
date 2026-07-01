@@ -2952,23 +2952,35 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 23, y + 3);
       ctx.stroke();
       ctx.setLineDash([]);
-      y += 18;
+      y += 22;
     };
     
     const cols = [
-      { x: 23, width: 100, align: 'left', label: 'الإجمالي' },
-      { x: 123, width: 100, align: 'center', label: 'السعر' },
-      { x: 223, width: 75, align: 'center', label: 'الكمية' },
-      { x: 298, width: 220, align: 'right', label: 'الصنف' },
-      { x: 518, width: 35, align: 'center', label: '#' }
+      { x: 23, width: 95, align: 'left', label: 'الإجمالي' },
+      { x: 118, width: 90, align: 'center', label: 'السعر' },
+      { x: 208, width: 95, align: 'center', label: 'الكمية' },
+      { x: 303, width: 205, align: 'right', label: 'الصنف' },
+      { x: 508, width: 45, align: 'center', label: '#' }
     ];
     
     const isPurchase = saleData.invoiceId && saleData.invoiceId.startsWith("PUR-");
     
+    const subtotal = isPurchase 
+      ? (saleData.totalBeforeDiscount || saleData.subtotal || saleData.totalAmount || 0)
+      : (saleData.subtotal || saleData.totalAmount || 0);
+    const netTotal = isPurchase
+      ? (saleData.totalAfterDiscount || subtotal)
+      : Math.max(0, subtotal - (saleData.discount || 0));
+    const received = isPurchase
+      ? (saleData.paidAmount || saleData.receivedAmount || 0)
+      : (saleData.receivedAmount || 0);
+    const remaining = Math.max(0, netTotal - received);
+    
     // HEADER SECTION
     center("شركة فستقه للمنتجات الغذائيه المحدوده", SIZE_HEADER, true);
     
-    const titleText = isPurchase ? "فاتورة شراء" : "فاتورة بيع";
+    const statusSuffix = remaining > 0 ? " (آجل)" : " (نقدا)";
+    const titleText = (isPurchase ? "فاتورة شراء" : "فاتورة بيع") + statusSuffix;
     center(titleText, SIZE_TITLE, true);
     
     rowLR(saleData.invoiceId, "رقم الفاتورة:", SIZE_BODY, true);
@@ -2993,6 +3005,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     rowLR("البصرة", "العنوان:", SIZE_BODY, true);
     
+    y += 10;
     dashedLine();
     
     // BORDERED ITEMS TABLE
@@ -3034,7 +3047,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     ctx.textBaseline = 'top';
     
     (saleData.items || []).forEach((item, index) => {
-      const nameLines = wrapText(item.name, 204, SIZE_BODY, true);
+      const nameLines = wrapText(item.name, 189, SIZE_BODY, true);
       const rowHeight = Math.max(1, nameLines.length) * 28 + 16;
       
       ctx.strokeRect(23, y, 530, rowHeight);
@@ -3081,7 +3094,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const summaryRowHeight = 45;
     ctx.strokeRect(23, y, 530, summaryRowHeight);
     
-    const dividerXPoints = [123, 223, 298];
+    const dividerXPoints = [118, 208, 303];
     dividerXPoints.forEach(divX => {
       ctx.beginPath();
       ctx.moveTo(divX, y);
@@ -3103,24 +3116,15 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     y += summaryRowHeight;
     
+    y += 10;
     dashedLine();
     
     // FOOTER SECTION
-    const subtotal = isPurchase 
-      ? (saleData.totalBeforeDiscount || saleData.subtotal || saleData.totalAmount || 0)
-      : (saleData.subtotal || saleData.totalAmount || 0);
-    const netTotal = isPurchase
-      ? (saleData.totalAfterDiscount || subtotal)
-      : Math.max(0, subtotal - (saleData.discount || 0));
-    const received = isPurchase
-      ? (saleData.paidAmount || saleData.receivedAmount || 0)
-      : (saleData.receivedAmount || 0);
-    const remaining = Math.max(0, netTotal - received);
-    
     rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", SIZE_BODY, true);
     rowLR(`${fmt(received)} د.ع`, "المدفوع:", SIZE_BODY, true);
     rowLR(`${fmt(remaining)} د.ع`, "المتبقي:", SIZE_BODY, true);
     
+    y += 10;
     dashedLine();
     
     let currentDebt = 0;
@@ -3147,6 +3151,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const debtLabel = isPurchase ? "المطلوب سداده (له):" : "المطلوب سداده:";
     rowLR(`${fmt(finalDebt)} د.ع`, debtLabel, SIZE_EMPHASIS, true);
     
+    y += 10;
     dashedLine();
     
     center("الخطأ والسهو مرجوع للطرفين ♥", SIZE_FOOTER, true);
@@ -3190,6 +3195,7 @@ const printThermalViaRawBT = async (saleData, customerOverride) => {
     showArabicToast("فشل تحضير الطباعة الحرارية", "error");
   }
 };
+
 
 const sendCanvasToRawBT = (canvas) => {
   try {
