@@ -2936,11 +2936,11 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     };
     
     const cols = [
-      { x: 23, width: 35, align: 'center', label: '#' },
-      { x: 58, width: 220, align: 'right', label: 'الصنف' },
-      { x: 278, width: 75, align: 'center', label: 'القطع' },
-      { x: 353, width: 100, align: 'center', label: 'السعر' },
-      { x: 453, width: 100, align: 'left', label: 'الإجمالي' }
+      { x: 23, width: 100, align: 'left', label: 'الإجمالي' },
+      { x: 123, width: 100, align: 'center', label: 'السعر' },
+      { x: 223, width: 75, align: 'center', label: 'الكمية' },
+      { x: 298, width: 220, align: 'right', label: 'الصنف' },
+      { x: 518, width: 35, align: 'center', label: '#' }
     ];
     
     const isPurchase = saleData.invoiceId && saleData.invoiceId.startsWith("PUR-");
@@ -2957,8 +2957,8 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       const supplierName = saleData.companyName || 'مورد عام';
       rowLR(supplierName, "اسم المورد:", 33, true);
       
-      const dateTimeStr = saleData.dateTime || saleData.date || '';
-      rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
+      const dateOnly = saleData.dateTime ? saleData.dateTime.split(/\s+/)[0] : (saleData.date || '');
+      rowLR(dateOnly, "التاريخ:", 33, true);
     } else {
       let effectiveCustomer = customerOverride;
       if (!effectiveCustomer && saleData.customerName) {
@@ -2967,11 +2967,11 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
       rowLR(custName, "اسم الزبون:", 33, true);
       
-      const now = new Date();
-      const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-      const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
-      rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
+      const dateOnly = saleData.date || new Date().toISOString().split('T')[0];
+      rowLR(dateOnly, "التاريخ:", 33, true);
     }
+    
+    rowLR("البصرة", "العنوان:", 33, true);
     
     dashedLine();
     
@@ -3031,31 +3031,57 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.font = 'bold 22px Cairo, sans-serif';
       ctx.direction = 'rtl';
       
-      // Col 1: Index
+      // Col 5: Index
       ctx.textAlign = 'center';
-      ctx.fillText((index + 1).toString(), cols[0].x + cols[0].width / 2, y + (rowHeight - 22) / 2);
+      ctx.fillText((index + 1).toString(), cols[4].x + cols[4].width / 2, y + (rowHeight - 22) / 2);
       
-      // Col 2: Name (multiline)
+      // Col 4: Name (multiline)
       ctx.textAlign = 'right';
       const nameYStart = y + (rowHeight - nameLines.length * 28) / 2;
       nameLines.forEach((line, lineIdx) => {
-        ctx.fillText(line, cols[1].x + cols[1].width - 8, nameYStart + lineIdx * 28);
+        ctx.fillText(line, cols[3].x + cols[3].width - 8, nameYStart + lineIdx * 28);
       });
       
       // Col 3: Qty
       ctx.textAlign = 'center';
       ctx.fillText(item.qty.toString(), cols[2].x + cols[2].width / 2, y + (rowHeight - 22) / 2);
       
-      // Col 4: Price
+      // Col 2: Price
       ctx.textAlign = 'center';
-      ctx.fillText(fmt(item.price), cols[3].x + cols[3].width / 2, y + (rowHeight - 22) / 2);
+      ctx.fillText(fmt(item.price), cols[1].x + cols[1].width / 2, y + (rowHeight - 22) / 2);
       
-      // Col 5: Total
+      // Col 1: Total
       ctx.textAlign = 'left';
-      ctx.fillText(fmt(item.price * item.qty), cols[4].x + 8, y + (rowHeight - 22) / 2);
+      ctx.fillText(fmt(item.price * item.qty), cols[0].x + 8, y + (rowHeight - 22) / 2);
       
       y += rowHeight;
     });
+    
+    // summary row inside the table
+    const summaryRowHeight = 45;
+    ctx.strokeRect(23, y, 530, summaryRowHeight);
+    
+    const dividerXPoints = [123, 223, 298];
+    dividerXPoints.forEach(divX => {
+      ctx.beginPath();
+      ctx.moveTo(divX, y);
+      ctx.lineTo(divX, y + summaryRowHeight);
+      ctx.stroke();
+    });
+    
+    ctx.font = 'bold 24px Cairo, sans-serif';
+    ctx.direction = 'rtl';
+    
+    const totalQty = (saleData.items || []).reduce((sum, item) => sum + (parseInt(item.qty) || 0), 0);
+    const qtyLabelText = `قطعة ${totalQty}`;
+    ctx.textAlign = 'right';
+    ctx.fillText(qtyLabelText, 553 - 8, y + (summaryRowHeight - 24) / 2);
+    
+    const grandTotal = (saleData.items || []).reduce((sum, item) => sum + (item.price * item.qty), 0);
+    ctx.textAlign = 'left';
+    ctx.fillText(fmt(grandTotal), 23 + 8, y + (summaryRowHeight - 24) / 2);
+    
+    y += summaryRowHeight;
     
     dashedLine();
     
@@ -3103,7 +3129,9 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     dashedLine();
     
-    center("الخطأ والسهو مرجوع للطرفين", 33, true);
+    center("الخطأ والسهو مرجوع للطرفين ♥", 33, true);
+    center("البصره", 30, true);
+    center("07801406639", 30, true);
     
     y += 30;
     return y;
