@@ -2966,11 +2966,11 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     };
     
     const cols = [
-      { x: 23, width: 95, align: 'left', label: 'الإجمالي' },
-      { x: 118, width: 90, align: 'center', label: 'السعر' },
-      { x: 208, width: 95, align: 'center', label: 'الكمية' },
-      { x: 303, width: 205, align: 'right', label: 'الصنف' },
-      { x: 508, width: 45, align: 'center', label: '#' }
+      { x: 23, width: 95, align: 'left', label: 'الإجمالي', headerFontSize: 18 },
+      { x: 118, width: 90, align: 'center', label: 'السعر', headerFontSize: 22 },
+      { x: 208, width: 95, align: 'center', label: 'الكمية', headerFontSize: 20 },
+      { x: 303, width: 205, align: 'right', label: 'الصنف', headerFontSize: 22 },
+      { x: 508, width: 45, align: 'center', label: '#', headerFontSize: 22 }
     ];
     
     const isPurchase = saleData.invoiceId && saleData.invoiceId.startsWith("PUR-");
@@ -3034,14 +3034,11 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       ctx.stroke();
     }
     
-    ctx.font = `900 ${SIZE_BODY}px Cairo, sans-serif`;
     ctx.fillStyle = '#000000';
     ctx.textBaseline = 'middle';
     
     cols.forEach(col => {
-      const labelMaxWidth = col.width - 16;
-      const labelSize = fitCellText(col.label, labelMaxWidth, SIZE_BODY, true);
-      ctx.font = `900 ${labelSize}px Cairo, sans-serif`;
+      ctx.font = `900 ${col.headerFontSize}px Cairo, sans-serif`;
       ctx.textAlign = col.align;
       let textX;
       if (col.align === 'center') {
@@ -3110,7 +3107,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       const totalSize = fitCellText(totalText, 79, SIZE_BODY, true);
       ctx.font = `900 ${totalSize}px Cairo, sans-serif`;
       ctx.textAlign = 'left';
-      ctx.fillText(totalText, cols[0].x + 8, y + (rowHeight - totalSize) / 2);
+      ctx.fillText(totalText, cols[0].x + 8, y + (rowHeight - SIZE_BODY) / 2);
       
       y += rowHeight;
     });
@@ -3141,7 +3138,7 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     const grandTotalSize = fitCellText(grandTotalText, 79, SIZE_BODY, true);
     ctx.font = `900 ${grandTotalSize}px Cairo, sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(grandTotalText, 23 + 8, y + (summaryRowHeight - grandTotalSize) / 2);
+    ctx.fillText(grandTotalText, 23 + 8, y + (summaryRowHeight - SIZE_BODY) / 2);
     
     y += summaryRowHeight;
     
