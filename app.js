@@ -17,6 +17,7 @@ let cart = JSON.parse(localStorage.getItem('posCart')) || [];
 let salesHistory = [];
 let purchases = [];
 let purchaseCart = [];
+let currentOpenPurchase = null;
 let isLoading = false;
 let hasError = false;
 let activeProfileCustomer = null;
@@ -691,6 +692,7 @@ const purchaseDetailsModal = document.getElementById('purchase-details-modal');
 const purchaseDetailsContent = document.getElementById('purchase-details-content');
 const purchaseDetailsDismiss = document.getElementById('purchase-details-dismiss');
 const purchaseDetailsClose = document.getElementById('purchase-details-close');
+const purchaseDetailPrintBtn = document.getElementById('purchase-detail-print-btn');
 
 const purDetailId = document.getElementById('pur-detail-id');
 const purDetailCompany = document.getElementById('pur-detail-company');
@@ -2374,6 +2376,7 @@ const renderPurchaseHistory = () => {
 };
 
 const openPurchaseDetailsModal = (pur) => {
+  currentOpenPurchase = pur;
   purDetailId.textContent = pur.invoiceId;
   purDetailCompany.textContent = pur.companyName;
   purDetailDatetime.textContent = pur.dateTime;
@@ -2912,74 +2915,160 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
       y += 18;
     };
     
-    const smallDashedLine = () => {
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.setLineDash([6, 6]);
-      ctx.moveTo(23, y + 2);
-      ctx.lineTo(RAWBT_PRINT_WIDTH_PX - 23, y + 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      y += 10;
+    const wrapText = (text, maxWidth, fontSize, isBold = false) => {
+      ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px Cairo, sans-serif`;
+      const words = text.split(' ');
+      const lines = [];
+      let currentLine = words[0];
+      
+      for (let i = 1; i < words.length; i++) {
+        const word = words[i];
+        const width = ctx.measureText(currentLine + " " + word).width;
+        if (width < maxWidth) {
+          currentLine += " " + word;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      }
+      lines.push(currentLine);
+      return lines;
     };
+    
+    const cols = [
+      { x: 23, width: 35, align: 'center', label: '#' },
+      { x: 58, width: 220, align: 'right', label: 'الصنف' },
+      { x: 278, width: 75, align: 'center', label: 'القطع' },
+      { x: 353, width: 100, align: 'center', label: 'السعر' },
+      { x: 453, width: 100, align: 'left', label: 'الإجمالي' }
+    ];
+    
+    const isPurchase = saleData.invoiceId && saleData.invoiceId.startsWith("PUR-");
     
     // HEADER SECTION
     center("شركة فستقه للمنتجات الغذائيه المحدوده", 48, true);
     
-    let effectiveCustomer = customerOverride;
-    if (!effectiveCustomer && saleData.customerName) {
-      effectiveCustomer = customers.find(c => c.name === saleData.customerName);
-    }
-    
-    const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
-    center(custName, 39, true);
+    const titleText = isPurchase ? "فاتورة شراء" : "فاتورة بيع";
+    center(titleText, 39, true);
     
     rowLR(saleData.invoiceId, "رقم الفاتورة:", 33, true);
     
-    if (effectiveCustomer && effectiveCustomer.Latitude && effectiveCustomer.Longitude && parseFloat(effectiveCustomer.Latitude) !== 0 && parseFloat(effectiveCustomer.Longitude) !== 0) {
-      rowLR(`${effectiveCustomer.Latitude.toFixed(4)}, ${effectiveCustomer.Longitude.toFixed(4)}`, "الموقع:", 33, true);
+    if (isPurchase) {
+      const supplierName = saleData.companyName || 'مورد عام';
+      rowLR(supplierName, "اسم المورد:", 33, true);
+      
+      const dateTimeStr = saleData.dateTime || saleData.date || '';
+      rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
+    } else {
+      let effectiveCustomer = customerOverride;
+      if (!effectiveCustomer && saleData.customerName) {
+        effectiveCustomer = customers.find(c => c.name === saleData.customerName);
+      }
+      const custName = (effectiveCustomer && effectiveCustomer.name) || saleData.customerName || 'عميل عام';
+      rowLR(custName, "اسم الزبون:", 33, true);
+      
+      const now = new Date();
+      const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
+      rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
     }
-    
-    const now = new Date();
-    const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
-    const dateTimeStr = `${saleData.date || now.toISOString().split('T')[0]} - ${timeStr}`;
-    rowLR(dateTimeStr, "التاريخ والوقت:", 33, true);
     
     dashedLine();
     
-    // ITEMS TABLE
-    (saleData.items || []).forEach(item => {
-      const prod = products.find(p => p.name === item.name) || inventory.find(p => p.name === item.name);
-      const wholesalePrice = prod ? (prod.wholesalePrice || 0) : 0;
-      const retailPrice = item.price || (prod ? prod.sellPrice || prod.price || 0 : 0);
-      const unitsPerCarton = prod ? (prod.unitsPerCarton || 0) : 0;
-      const rowTotal = item.price * item.qty;
+    // BORDERED ITEMS TABLE
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    
+    const headerHeight = 45;
+    ctx.strokeRect(23, y, 530, headerHeight);
+    
+    let currentX = 23;
+    for (let i = 0; i < cols.length - 1; i++) {
+      currentX += cols[i].width;
+      ctx.beginPath();
+      ctx.moveTo(currentX, y);
+      ctx.lineTo(currentX, y + headerHeight);
+      ctx.stroke();
+    }
+    
+    ctx.font = 'bold 22px Cairo, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.textBaseline = 'middle';
+    
+    cols.forEach(col => {
+      ctx.textAlign = col.align;
+      let textX;
+      if (col.align === 'center') {
+        textX = col.x + col.width / 2;
+      } else if (col.align === 'right') {
+        textX = col.x + col.width - 8;
+        ctx.direction = 'rtl';
+      } else {
+        textX = col.x + 8;
+        ctx.direction = 'rtl';
+      }
+      ctx.fillText(col.label, textX, y + headerHeight / 2);
+    });
+    
+    y += headerHeight;
+    ctx.textBaseline = 'top';
+    
+    (saleData.items || []).forEach((item, index) => {
+      const nameLines = wrapText(item.name, 204, 22, true);
+      const rowHeight = Math.max(1, nameLines.length) * 28 + 16;
       
-      ctx.font = 'bold 24px Cairo, sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText(item.name, RAWBT_PRINT_WIDTH_PX - 23, y);
-      y += 30;
+      ctx.strokeRect(23, y, 530, rowHeight);
       
-      rowLR(item.qty.toString(), "الكمية:", 22, true);
-      rowLR(`${fmt(wholesalePrice)} د.ع`, "سعر الجملة:", 22, true);
-      rowLR(`${fmt(retailPrice)} د.ع`, "سعر المفرد:", 22, true);
-      
-      if (unitsPerCarton > 0) {
-        rowLR(unitsPerCarton.toString(), "القطع بالكرتون:", 22, true);
+      let colX = 23;
+      for (let i = 0; i < cols.length - 1; i++) {
+        colX += cols[i].width;
+        ctx.beginPath();
+        ctx.moveTo(colX, y);
+        ctx.lineTo(colX, y + rowHeight);
+        ctx.stroke();
       }
       
-      rowLR(`${fmt(rowTotal)} د.ع`, "الإجمالي:", 24, true);
-      y += 6;
+      ctx.font = 'bold 22px Cairo, sans-serif';
+      ctx.direction = 'rtl';
+      
+      // Col 1: Index
+      ctx.textAlign = 'center';
+      ctx.fillText((index + 1).toString(), cols[0].x + cols[0].width / 2, y + (rowHeight - 22) / 2);
+      
+      // Col 2: Name (multiline)
+      ctx.textAlign = 'right';
+      const nameYStart = y + (rowHeight - nameLines.length * 28) / 2;
+      nameLines.forEach((line, lineIdx) => {
+        ctx.fillText(line, cols[1].x + cols[1].width - 8, nameYStart + lineIdx * 28);
+      });
+      
+      // Col 3: Qty
+      ctx.textAlign = 'center';
+      ctx.fillText(item.qty.toString(), cols[2].x + cols[2].width / 2, y + (rowHeight - 22) / 2);
+      
+      // Col 4: Price
+      ctx.textAlign = 'center';
+      ctx.fillText(fmt(item.price), cols[3].x + cols[3].width / 2, y + (rowHeight - 22) / 2);
+      
+      // Col 5: Total
+      ctx.textAlign = 'left';
+      ctx.fillText(fmt(item.price * item.qty), cols[4].x + 8, y + (rowHeight - 22) / 2);
+      
+      y += rowHeight;
     });
     
     dashedLine();
     
     // FOOTER SECTION
-    const subtotal = saleData.subtotal || saleData.totalAmount || 0;
-    const discount = saleData.discount || 0;
-    const netTotal = Math.max(0, subtotal - discount);
-    const received = saleData.receivedAmount || 0;
+    const subtotal = isPurchase 
+      ? (saleData.totalBeforeDiscount || saleData.subtotal || saleData.totalAmount || 0)
+      : (saleData.subtotal || saleData.totalAmount || 0);
+    const netTotal = isPurchase
+      ? (saleData.totalAfterDiscount || subtotal)
+      : Math.max(0, subtotal - (saleData.discount || 0));
+    const received = isPurchase
+      ? (saleData.paidAmount || saleData.receivedAmount || 0)
+      : (saleData.receivedAmount || 0);
     const remaining = Math.max(0, netTotal - received);
     
     rowLR(`${fmt(subtotal)} د.ع`, "الإجمالي:", 33, true);
@@ -2988,32 +3077,32 @@ const buildReceiptCanvas = (saleData, customerOverride) => {
     
     dashedLine();
     
-    let currentCustomerDebt = 0;
-    if (effectiveCustomer) {
-      const updatedCust = customers.find(c => c.id === effectiveCustomer.id || c.name === effectiveCustomer.name);
-      if (updatedCust) {
-        currentCustomerDebt = updatedCust.debt || 0;
-      } else {
-        currentCustomerDebt = effectiveCustomer.debt || 0;
+    let currentDebt = 0;
+    if (isPurchase) {
+      const supplierName = saleData.companyName || 'مورد عام';
+      const matchedSupplier = suppliers.find(s => s.name === supplierName);
+      currentDebt = matchedSupplier ? (matchedSupplier.debt || 0) : 0;
+    } else {
+      let effectiveCustomer = customerOverride;
+      if (!effectiveCustomer && saleData.customerName) {
+        effectiveCustomer = customers.find(c => c.name === saleData.customerName);
+      }
+      if (effectiveCustomer) {
+        const updatedCust = customers.find(c => c.id === effectiveCustomer.id || c.name === effectiveCustomer.name);
+        currentDebt = updatedCust ? (updatedCust.debt || 0) : (effectiveCustomer.debt || 0);
       }
     }
-    const previousDebt = Math.max(0, currentCustomerDebt - remaining);
+    
+    const previousDebt = Math.max(0, currentDebt - remaining);
     const finalDebt = previousDebt + remaining;
     
     rowLR(`${fmt(previousDebt)} د.ع`, "رصيد سابق:", 36, true);
-    rowLR(`${fmt(finalDebt)} د.ع`, "المطلوب سداده:", 42, true);
+    
+    const debtLabel = isPurchase ? "المطلوب سداده (له):" : "المطلوب سداده:";
+    rowLR(`${fmt(finalDebt)} د.ع`, debtLabel, 42, true);
     
     dashedLine();
     
-    center("جيكور", 33, true);
-    
-    ctx.font = '30px Cairo, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.direction = 'ltr';
-    ctx.fillText("JEKOR - 19/10", RAWBT_PRINT_WIDTH_PX / 2, y);
-    ctx.textAlign = 'right';
-    ctx.direction = 'rtl';
-    y += 36;
     center("الخطأ والسهو مرجوع للطرفين", 33, true);
     
     y += 30;
@@ -3773,6 +3862,13 @@ if (purchaseHistoryClose) purchaseHistoryClose.addEventListener('click', closePu
 
 if (purchaseDetailsDismiss) purchaseDetailsDismiss.addEventListener('click', closePurchaseDetailsModal);
 if (purchaseDetailsClose) purchaseDetailsClose.addEventListener('click', closePurchaseDetailsModal);
+if (purchaseDetailPrintBtn) {
+  purchaseDetailPrintBtn.addEventListener('click', () => {
+    if (!currentOpenPurchase) return;
+    printThermalViaRawBT(currentOpenPurchase);
+    closePurchaseDetailsModal();
+  });
+}
 
 if (purAddItemBtn) {
   purAddItemBtn.addEventListener('click', () => {
